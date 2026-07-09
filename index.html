@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>GMB Field | تسجيل الدخول</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.3/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --bg: #0f1419; --card: #1a2129; --card2: #212a35;
@@ -98,6 +98,10 @@
 </div>
 
 <script>
+if (typeof supabase === 'undefined') {
+  document.body.innerHTML = '<div style="color:#e74c3c;text-align:center;padding:40px;font-family:sans-serif">فشل تحميل مكتبة الاتصال — تأكد من الإنترنت وحدّث الصفحة</div>';
+  throw new Error('supabase-js failed to load');
+}
 const SUPABASE_URL = "https://lgewtvrqfofnkrfzqqlz.supabase.co";
 const SUPABASE_KEY = "sb_publishable_lrw3zxHRNhgOYqwivMhrjQ_QV5z-NmN";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -170,6 +174,10 @@ async function doSignin() {
 }
 
 async function doLogout() { await db.auth.signOut(); profile = null; $('last4').value=''; $('pin').value=''; msg('loginMsg','','err'); $('loginMsg').style.display='none'; show('loginCard'); }
+
+// Enter key support
+$('last4').addEventListener('keydown', e => { if (e.key === 'Enter') $('pin').focus(); });
+$('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
 // auto-restore session
 db.auth.getSession().then(({data:{session}}) => { if (session) loadProfile(); });

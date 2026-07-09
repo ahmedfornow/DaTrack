@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GMB Field | تسجيل الدخول</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.3/supabase.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2129; --card2: #212a35;
+    --gold: #c9a961; --text: #e8e6e3; --muted: #8b95a1;
+    --green: #2ecc71; --red: #e74c3c; --blue: #3498db;
+    --radius: 14px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+  body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .container { width: 100%; max-width: 420px; }
+  .logo { text-align: center; margin-bottom: 28px; }
+  .logo h1 { font-size: 26px; color: var(--gold); letter-spacing: 1px; }
+  .logo p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 24px; border: 1px solid #2a3441; }
+  .card h2 { font-size: 18px; margin-bottom: 18px; color: var(--text); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+  input, select { width: 100%; padding: 13px 14px; border-radius: 10px; border: 1px solid #2f3b4a; background: var(--card2); color: var(--text); font-size: 16px; text-align: center; letter-spacing: 2px; }
+  select { text-align: right; letter-spacing: 0; }
+  input:focus, select:focus { outline: none; border-color: var(--gold); }
+  button { width: 100%; padding: 14px; margin-top: 20px; border: none; border-radius: 10px; background: var(--gold); color: #14181d; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .2s; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .msg { margin-top: 14px; padding: 12px; border-radius: 10px; font-size: 14px; text-align: center; display: none; }
+  .msg.err { display: block; background: rgba(231,76,60,.12); color: var(--red); border: 1px solid rgba(231,76,60,.3); }
+  .msg.ok { display: block; background: rgba(46,204,113,.12); color: var(--green); border: 1px solid rgba(46,204,113,.3); }
+  .hidden { display: none !important; }
+  .welcome { font-size: 15px; color: var(--muted); margin-bottom: 4px; }
+  .pname { font-size: 20px; font-weight: 700; color: var(--gold); margin-bottom: 18px; }
+  .shift-row { display: flex; gap: 10px; margin-top: 6px; }
+  .shift-btn { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #2f3b4a; background: var(--card2); color: var(--text); font-size: 15px; cursor: pointer; text-align: center; }
+  .shift-btn.active { border-color: var(--gold); background: rgba(201,169,97,.15); color: var(--gold); font-weight: 700; }
+  .success-box { text-align: center; padding: 10px 0; }
+  .success-box .big { font-size: 48px; margin-bottom: 10px; }
+  .success-box h3 { color: var(--green); margin-bottom: 8px; }
+  .success-box p { color: var(--muted); font-size: 14px; line-height: 1.8; }
+  .detail { background: var(--card2); border-radius: 10px; padding: 12px; margin-top: 14px; font-size: 14px; text-align: right; }
+  .detail div { padding: 4px 0; }
+  .detail span { color: var(--muted); }
+  .logout { background: transparent; border: 1px solid #2f3b4a; color: var(--muted); margin-top: 12px; font-weight: 400; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <h1>GMB FIELD</h1>
+    <p>نظام تقارير الفريق الميداني</p>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="card" id="loginCard">
+    <h2>تسجيل الدخول</h2>
+    <label>رقم المستخدم (4 أرقام)</label>
+    <input type="tel" id="last4" maxlength="4" inputmode="numeric" placeholder="• • • •" autocomplete="off">
+    <label>كلمة المرور</label>
+    <input type="password" id="pin" maxlength="10" inputmode="numeric" placeholder="• • • •" autocomplete="off">
+    <button id="loginBtn" onclick="doLogin()">دخول</button>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+  <!-- SIGN-IN (attendance) -->
+  <div class="card hidden" id="signinCard">
+    <div class="welcome">حياك الله 👋</div>
+    <div class="pname" id="promoName">—</div>
+    <label>موقع اليوم (Touch Point)</label>
+    <select id="tpSelect"></select>
+    <div id="shiftWrap">
+      <label>الفترة</label>
+      <div class="shift-row">
+        <div class="shift-btn active" id="shiftFirst" onclick="pickShift('first')">الأولى ☀️</div>
+        <div class="shift-btn" id="shiftSecond" onclick="pickShift('second')">الثانية 🌙</div>
+      </div>
+    </div>
+    <button id="signinBtn" onclick="doSignin()">تسجيل الحضور</button>
+    <div class="msg" id="signinMsg"></div>
+    <button class="logout" onclick="doLogout()">تسجيل خروج</button>
+  </div>
+
+  <!-- SUCCESS -->
+  <div class="card hidden" id="doneCard">
+    <div class="success-box">
+      <div class="big">✅</div>
+      <h3>تم تسجيل حضورك</h3>
+      <div class="detail">
+        <div><span>الموقع: </span><b id="dTp">—</b></div>
+        <div><span>الفترة: </span><b id="dShift">—</b></div>
+        <div><span>الوقت: </span><b id="dTime">—</b></div>
+      </div>
+      <p style="margin-top:16px">شاشة تسجيل المبيعات قادمة في التحديث القادم 🚀</p>
+    </div>
+    <button class="logout" onclick="doLogout()">تسجيل خروج</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://lgewtvrqfofnkrfzqqlz.supabase.co";
+const SUPABASE_KEY = "sb_publishable_lrw3zxHRNhgOYqwivMhrjQ_QV5z-NmN";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let profile = null, touchPoints = [], chosenShift = 'first';
+
+const $ = id => document.getElementById(id);
+const show = (id) => { ['loginCard','signinCard','doneCard'].forEach(c => $(c).classList.add('hidden')); $(id).classList.remove('hidden'); };
+const msg = (id, text, type) => { const el = $(id); el.textContent = text; el.className = 'msg ' + type; };
+
+async function doLogin() {
+  const last4 = $('last4').value.trim();
+  const pin = $('pin').value.trim();
+  if (last4.length !== 4 || pin.length < 6) return msg('loginMsg','أدخل رقم المستخدم وكلمة المرور كاملة','err');
+  $('loginBtn').disabled = true;
+  msg('loginMsg','جاري الدخول...','ok');
+  const { error } = await db.auth.signInWithPassword({
+    email: `${last4}@example.com`,
+    password: pin
+  });
+  if (error) { $('loginBtn').disabled = false; return msg('loginMsg','بيانات الدخول غير صحيحة','err'); }
+  await loadProfile();
+  $('loginBtn').disabled = false;
+}
+
+async function loadProfile() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return;
+  const { data: prof } = await db.from('users').select('*').eq('id', user.id).single();
+  if (!prof) { msg('loginMsg','حسابك غير مسجل في النظام — كلّم المشرف','err'); await db.auth.signOut(); return; }
+  profile = prof;
+  $('promoName').textContent = prof.full_name;
+  const { data: tps } = await db.from('touch_points').select('*').eq('active', true).order('name');
+  touchPoints = tps || [];
+  $('tpSelect').innerHTML = touchPoints.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  $('tpSelect').onchange = updateShiftUI;
+  updateShiftUI();
+  show('signinCard');
+}
+
+function updateShiftUI() {
+  const tp = touchPoints.find(t => t.id == $('tpSelect').value);
+  const dual = tp && tp.dual_shift;
+  $('shiftWrap').style.display = dual ? 'block' : 'none';
+  if (!dual) chosenShift = 'first';
+}
+
+function pickShift(s) {
+  chosenShift = s;
+  $('shiftFirst').classList.toggle('active', s==='first');
+  $('shiftSecond').classList.toggle('active', s==='second');
+}
+
+async function doSignin() {
+  $('signinBtn').disabled = true;
+  const tpId = parseInt($('tpSelect').value);
+  const { error } = await db.from('attendance').insert({
+    promoter_id: profile.id, touch_point_id: tpId, shift: chosenShift
+  });
+  $('signinBtn').disabled = false;
+  if (error) {
+    if (error.code === '23505') return msg('signinMsg','حضورك مسجل مسبقاً لهذه الفترة اليوم ✋','err');
+    return msg('signinMsg','خطأ في التسجيل — حاول مرة أخرى','err');
+  }
+  const tp = touchPoints.find(t => t.id === tpId);
+  $('dTp').textContent = tp ? tp.name : '—';
+  $('dShift').textContent = chosenShift === 'first' ? 'الأولى ☀️' : 'الثانية 🌙';
+  $('dTime').textContent = new Date().toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'});
+  show('doneCard');
+}
+
+async function doLogout() { await db.auth.signOut(); profile = null; $('last4').value=''; $('pin').value=''; msg('loginMsg','','err'); $('loginMsg').style.display='none'; show('loginCard'); }
+
+// auto-restore session
+db.auth.getSession().then(({data:{session}}) => { if (session) loadProfile(); });
+</script>
+</body>
+</html>

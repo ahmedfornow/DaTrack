@@ -154,6 +154,12 @@
         <p style="font-size:12px;color:var(--muted)">أدخل الكمية المتوفرة لكل صنف ثم احفظ</p>
         <div id="stockList"><div class="spin">جاري التحميل...</div></div>
         <button id="stockBtn" onclick="submitStock()">حفظ الجرد 📦</button>
+        <button onclick="genStockMsg()" style="background:transparent;border:1px solid var(--gold);color:var(--gold)">توليد رسالة الجرد 📋</button>
+        <div id="stockMsgWrap" class="hidden">
+          <label>راجع وعدّل قبل النسخ</label>
+          <textarea id="stockMsgBox" style="width:100%;min-height:200px;padding:12px;border-radius:10px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;direction:ltr;font-family:monospace"></textarea>
+          <button onclick="copyStockMsg()" id="copyStockBtn">نسخ للواتساب 📋</button>
+        </div>
         <div class="msg" id="stockMsg"></div>
       </div>
     </div>
@@ -177,6 +183,11 @@
       <select id="citySelect" onchange="loadStaffCounts()"></select>
       <div style="height:12px"></div>
     </div>
+    <div class="tabs" style="margin-bottom:12px">
+      <div class="tab active" id="pToday" onclick="setPeriod('today')">اليوم</div>
+      <div class="tab" id="pWeek" onclick="setPeriod('week')">آخر 7 أيام</div>
+      <div class="tab" id="pMonth" onclick="setPeriod('month')">الشهر</div>
+    </div>
     <div class="counter">
       <div><div class="num" id="sToday">—</div><div class="lbl">مبيعات الفريق اليوم</div></div>
       <div><div class="num" id="sAtt">—</div><div class="lbl">حضور اليوم</div></div>
@@ -184,8 +195,15 @@
     <div style="margin-top:10px">
       <h2 style="font-size:15px;margin:14px 0 8px;color:var(--gold)">📋 حضور اليوم</h2>
       <div id="attList"><div class="spin">جاري التحميل...</div></div>
-      <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🛒 مبيعات المندوبين اليوم</h2>
+      <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🛒 مبيعات المندوبين</h2>
       <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
+      <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">📍 مبيعات المواقع</h2>
+      <div id="outletSales"><div class="spin">جاري التحميل...</div></div>
+      <button onclick="genSummary()" style="margin-top:14px">📋 توليد ملخص الفترة</button>
+      <div id="sumWrap" class="hidden">
+        <textarea id="sumBox" style="width:100%;min-height:220px;margin-top:10px;padding:12px;border-radius:10px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;direction:ltr;font-family:monospace"></textarea>
+        <button onclick="copySummary()" id="copySumBtn">نسخ الملخص 📋</button>
+      </div>
       <div id="targetsSection" class="hidden">
         <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🎯 أهداف شهر <span id="tgMonth"></span> — تُحدد مرة واحدة</h2>
         <div id="targetsList"><div class="spin">جاري التحميل...</div></div>
@@ -414,6 +432,27 @@ async function submitStock(){
   msg('stockMsg',`تم حفظ ${rows.length} صنف ✅`,'ok');
 }
 
+function genStockMsg(){
+  const d=new Date();
+  const dateStr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  const outlet=attendance.touch_points?attendance.touch_points.name:'';
+  const lines=[`جرد ${outlet} - ${dateStr}`,`Shift : ${attendance.shift==='day'?'Day':'Night'}`,''];
+  let any=false;
+  stockCatalog.forEach(it=>{
+    const el=$('stk-'+it.id);
+    if(el&&el.value.trim()!==''){any=true;lines.push(`${it.item_name.replace('IQOS ILUMA i ','').replace('IQOS ','')}: ${el.value.trim()}`)}
+  });
+  if(!any)return msg('stockMsg','أدخل الكميات أولاً','err');
+  $('stockMsgBox').value=lines.join('\n');
+  $('stockMsgWrap').classList.remove('hidden');
+}
+function copyStockMsg(){
+  navigator.clipboard.writeText($('stockMsgBox').value).then(()=>{
+    $('copyStockBtn').textContent='✅ تم النسخ';
+    setTimeout(()=>$('copyStockBtn').textContent='نسخ للواتساب 📋',2000);
+  });
+}
+
 // ---- CHECKLIST ----
 async function loadChecklist(){
   const{data:items}=await db.from('checklist_items').select('*').eq('active',true).order('sort_order');
@@ -451,35 +490,47 @@ async function staffFlow(){
   show('staffCard');
   loadStaffCounts();
 }
+let staffPeriod='today';
+function setPeriod(p){
+  staffPeriod=p;
+  ['Today','Week','Month'].forEach(x=>$('p'+x).classList.toggle('active',x.toLowerCase()===p));
+  loadStaffCounts();
+}
+function periodStart(){
+  const d=new Date();
+  if(staffPeriod==='today')return d.toISOString().slice(0,10);
+  if(staffPeriod==='week'){d.setDate(d.getDate()-6);return d.toISOString().slice(0,10)}
+  return d.toISOString().slice(0,7)+'-01';
+}
 async function loadStaffCounts(){
-  const today=new Date().toISOString().slice(0,10);
+  const start=periodStart();
   const city=profile.role==='manager'?$('citySelect').value:profile.city;
   const[{count:sc},{count:ac}]=await Promise.all([
     db.from('sell_operations').select('*, attendance!inner(touch_points!inner(city))',{count:'exact',head:true})
-      .gte('created_at',today+'T00:00:00').eq('attendance.touch_points.city',city),
+      .gte('created_at',start+'T00:00:00').eq('attendance.touch_points.city',city),
     db.from('attendance').select('*, touch_points!inner(city)',{count:'exact',head:true})
-      .eq('work_date',today).eq('touch_points.city',city)
+      .gte('work_date',start).eq('touch_points.city',city)
   ]);
   $('sToday').textContent=sc??0;
   $('sAtt').textContent=ac??0;
-  loadDashLists(city,today);
-  if(profile.role==='supervisor')loadTargetsEditor();
+  loadDashLists(city,start);
+  if(profile.role==='supervisor'&&!window.tgLoaded){window.tgLoaded=true;loadTargetsEditor()}
 }
-async function loadDashLists(city,today){
+async function loadDashLists(city,start){
   // attendance list
   const{data:att}=await db.from('attendance')
     .select('shift,guided_trials,checked_in_at,users(full_name),touch_points!inner(name,city)')
-    .eq('work_date',today).eq('touch_points.city',city).order('checked_in_at');
+    .gte('work_date',start).eq('touch_points.city',city).order('checked_in_at');
   $('attList').innerHTML=(att&&att.length)?att.map(a=>`
     <div class="sale-item"><div><b>${a.users.full_name}</b>
       <div class="meta">${a.touch_points.name.split('_')[1]||a.touch_points.name} · ${a.shift==='day'?'نهاري ☀️':'ليلي 🌙'} · ${new Date(a.checked_in_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>
     </div><span style="font-size:11px;color:var(--muted)">GT: ${a.guided_trials}</span></div>`).join('')
     :'<div class="spin">لا حضور مسجل اليوم</div>';
-  // sales grouped by promoter
+  // sales grouped by promoter + outlet
   const{data:sales}=await db.from('sell_operations')
-    .select('sale_type,promoter_id,users(full_name),attendance!inner(touch_points!inner(city))')
-    .gte('created_at',today+'T00:00:00').eq('attendance.touch_points.city',city);
-  const by={};
+    .select('sale_type,promoter_id,users(full_name),attendance!inner(touch_points!inner(name,city))')
+    .gte('created_at',start+'T00:00:00').eq('attendance.touch_points.city',city);
+  const by={},byOut={};
   (sales||[]).forEach(s=>{
     const n=s.users.full_name;
     by[n]=by[n]||{t:0,sk:0,mgm:0,ld:0};
@@ -487,13 +538,46 @@ async function loadDashLists(city,today){
     if(s.sale_type==='SK'||s.sale_type==='SK+MGM')by[n].sk++;
     if(s.sale_type==='MGM'||s.sale_type==='SK+MGM')by[n].mgm++;
     if(s.sale_type==='LD')by[n].ld++;
+    const o=s.attendance.touch_points.name;
+    byOut[o]=(byOut[o]||0)+1;
   });
   const names=Object.keys(by).sort((a,b)=>by[b].t-by[a].t);
   $('promoSales').innerHTML=names.length?names.map(n=>`
     <div class="sale-item"><div><b>${n}</b>
       <div class="meta">SK: ${by[n].sk} · MGM: ${by[n].mgm} · LD: ${by[n].ld}</div>
     </div><span style="font-size:18px;font-weight:800;color:var(--gold)">${by[n].t}</span></div>`).join('')
-    :'<div class="spin">لا مبيعات اليوم</div>';
+    :'<div class="spin">لا مبيعات في الفترة</div>';
+  const outs=Object.keys(byOut).sort((a,b)=>byOut[b]-byOut[a]);
+  $('outletSales').innerHTML=outs.length?outs.map(o=>`
+    <div class="sale-item"><div><b>${o.split('_')[1]||o}</b></div>
+    <span style="font-size:18px;font-weight:800;color:var(--gold)">${byOut[o]}</span></div>`).join('')
+    :'<div class="spin">لا مبيعات في الفترة</div>';
+  // cache for summary
+  const gtTotal=(att||[]).reduce((a,x)=>a+(x.guided_trials||0),0);
+  window.dashData={by,byOut,total:(sales||[]).length,gt:gtTotal,att:(att||[]).length,city,start};
+}
+function genSummary(){
+  const d=window.dashData;if(!d)return;
+  const today=new Date().toISOString().slice(0,10);
+  const lbl=staffPeriod==='today'?'Daily':staffPeriod==='week'?'Weekly':'Monthly';
+  const lines=[`GMB ${d.city} — ${lbl} Summary`,`${d.start} → ${today}`,''];
+  let sk=0,mgm=0,ld=0;Object.values(d.by).forEach(v=>{sk+=v.sk;mgm+=v.mgm;ld+=v.ld});
+  lines.push(`Total sales : ${d.total}`);
+  lines.push(`SK: ${sk} | MGM: ${mgm} | LD: ${ld}`);
+  lines.push(`Guided trials : ${d.gt}`);
+  lines.push(`Check-ins : ${d.att}`);
+  lines.push('');lines.push('By promoter:');
+  Object.keys(d.by).sort((a,b)=>d.by[b].t-d.by[a].t).forEach((n,i)=>lines.push(`${i+1}. ${n} — ${d.by[n].t}`));
+  lines.push('');lines.push('By outlet:');
+  Object.keys(d.byOut).sort((a,b)=>d.byOut[b]-d.byOut[a]).forEach((o,i)=>lines.push(`${i+1}. ${o.split('_')[1]||o} — ${d.byOut[o]}`));
+  $('sumBox').value=lines.join('\n');
+  $('sumWrap').classList.remove('hidden');
+}
+function copySummary(){
+  navigator.clipboard.writeText($('sumBox').value).then(()=>{
+    $('copySumBtn').textContent='✅ تم النسخ';
+    setTimeout(()=>$('copySumBtn').textContent='نسخ الملخص 📋',2000);
+  });
 }
 let tgOutlets=[];
 async function loadTargetsEditor(){

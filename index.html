@@ -112,6 +112,7 @@
     <div id="paneSales">
       <div class="counter">
         <div><div class="num" id="cToday">0</div><div class="lbl">مبيعات اليوم</div></div>
+        <div><div class="num" id="cTarget">—</div><div class="lbl">هدف اليوم</div></div>
         <div><div class="num" id="cSK">0</div><div class="lbl">SK</div></div>
         <div><div class="num" id="cMGM">0</div><div class="lbl">MGM</div></div>
       </div>
@@ -131,6 +132,18 @@
       <div class="card">
         <h2>عمليات اليوم</h2>
         <div id="salesList"><div class="spin">لا مبيعات بعد</div></div>
+      </div>
+      <div class="card">
+        <h2>📄 تقرير نهاية الدوام</h2>
+        <label>عدد الـ Guided Trials</label>
+        <input type="tel" inputmode="numeric" id="gtInput" placeholder="0">
+        <button onclick="genReport()">توليد التقرير 📄</button>
+        <div id="reportWrap" class="hidden">
+          <label>راجع وعدّل قبل النسخ</label>
+          <textarea id="reportBox" style="width:100%;min-height:220px;padding:12px;border-radius:10px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;text-align:right;direction:ltr;font-family:monospace"></textarea>
+          <button onclick="copyReport()" id="copyBtn">نسخ للواتساب 📋</button>
+        </div>
+        <div class="msg" id="reportMsg"></div>
       </div>
     </div>
 
@@ -168,10 +181,18 @@
       <div><div class="num" id="sToday">—</div><div class="lbl">مبيعات الفريق اليوم</div></div>
       <div><div class="num" id="sAtt">—</div><div class="lbl">حضور اليوم</div></div>
     </div>
-    <p style="font-size:13px;color:var(--muted);text-align:center;padding:10px 0">
-      لوحة التحكم الكاملة قادمة في المرحلة الثالثة 🚧<br>
-      (متابعة حية، إدارة المتغيرات، استخراج التقارير)
-    </p>
+    <div style="margin-top:10px">
+      <h2 style="font-size:15px;margin:14px 0 8px;color:var(--gold)">📋 حضور اليوم</h2>
+      <div id="attList"><div class="spin">جاري التحميل...</div></div>
+      <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🛒 مبيعات المندوبين اليوم</h2>
+      <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
+      <div id="targetsSection" class="hidden">
+        <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🎯 الأهداف اليومية (لكل موقع/فترة)</h2>
+        <div id="targetsList"><div class="spin">جاري التحميل...</div></div>
+        <button onclick="saveTargets()" id="tgBtn">حفظ الأهداف 🎯</button>
+        <div class="msg" id="tgMsg"></div>
+      </div>
+    </div>
     <button class="logout" onclick="doLogout()">تسجيل خروج</button>
   </div>
 </div>
@@ -265,7 +286,12 @@ async function openWork(){
   buildSaleUI();
   show('workScreen');
   showTab('sales');
+  loadMyTarget();
   loadTodaySales();
+}
+async function loadMyTarget(){
+  const{data}=await db.from('targets').select('daily_target').eq('touch_point_id',attendance.touch_point_id).eq('shift',attendance.shift).maybeSingle();
+  $('cTarget').textContent=data?Number(data.daily_target):'—';
 }
 function showTab(t){
   ['Sales','Stock','Check'].forEach(x=>{
@@ -289,7 +315,12 @@ function pickDev(d){
   $('colorGrid').innerHTML=DEVICES[d].map(c=>`<div class="opt-btn" onclick="pickColor('${c}')" id="col-${c.replace(/ /g,'_')}">${c}</div>`).join('');
 }
 function pickColor(c){sel.color=c;document.querySelectorAll('#colorGrid .opt-btn').forEach(b=>b.classList.toggle('active',b.textContent===c))}
-function pickOpt(k,v){sel[k]=v;const list=k==='type'?TYPES:CUSTS;list.forEach(x=>$(k+'-'+x).classList.toggle('active',x===v))}
+function pickOpt(k,v){
+  // business rule: MGM only for LAS customers
+  if(k==='type'&&(v==='MGM'||v==='SK+MGM')&&sel.cust==='LAU')return msg('saleMsg','عروض MGM لعملاء LAS فقط','err');
+  if(k==='cust'&&v==='LAU'&&(sel.type==='MGM'||sel.type==='SK+MGM')){sel.type=null;TYPES.forEach(x=>$('type-'+x).classList.remove('active'))}
+  sel[k]=v;const list=k==='type'?TYPES:CUSTS;list.forEach(x=>$(k+'-'+x).classList.toggle('active',x===v));
+}
 async function submitSale(){
   if(!sel.dev||!sel.color||!sel.type||!sel.cust)return msg('saleMsg','أكمل كل الخيارات الأربعة','err');
   $('saleBtn').disabled=true;
@@ -322,6 +353,36 @@ async function delSale(id){
   if(!confirm('حذف هذه العملية؟'))return;
   await db.from('sell_operations').delete().eq('id',id).eq('promoter_id',profile.id);
   loadTodaySales();
+}
+
+// ---- END-OF-SHIFT REPORT ----
+async function genReport(){
+  const gt=parseInt($('gtInput').value)||0;
+  // save guided trials to attendance
+  await db.from('attendance').update({guided_trials:gt}).eq('id',attendance.id);
+  const today=new Date().toISOString().slice(0,10);
+  const{data}=await db.from('sell_operations').select('*').eq('attendance_id',attendance.id).order('created_at');
+  const sales=data||[];
+  const d=new Date();
+  const dateStr=`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  const lines=[];
+  lines.push(attendance.touch_points?attendance.touch_points.name:'');
+  lines.push(`Date : ${dateStr}`);
+  lines.push(`Shift : ${attendance.shift==='day'?'Day':'Night'}`);
+  lines.push('');lines.push('');
+  if(!sales.length){lines.push('No sales');}
+  else{sales.forEach((s,i)=>lines.push(`${i+1}. ${DEV_SHORT[s.device_type]||s.device_type} - ${s.color} | ${s.customer_type} | ${s.sale_type}`));}
+  lines.push('______________________');
+  lines.push(`Total sales : ${sales.length}`);
+  lines.push(`Guided trials : ${gt}`);
+  $('reportBox').value=lines.join('\n');
+  $('reportWrap').classList.remove('hidden');
+}
+function copyReport(){
+  navigator.clipboard.writeText($('reportBox').value).then(()=>{
+    $('copyBtn').textContent='✅ تم النسخ';
+    setTimeout(()=>$('copyBtn').textContent='نسخ للواتساب 📋',2000);
+  });
 }
 
 // ---- STOCK ----
@@ -396,6 +457,68 @@ async function loadStaffCounts(){
   ]);
   $('sToday').textContent=sc??0;
   $('sAtt').textContent=ac??0;
+  loadDashLists(city,today);
+  if(profile.role==='supervisor')loadTargetsEditor();
+}
+async function loadDashLists(city,today){
+  // attendance list
+  const{data:att}=await db.from('attendance')
+    .select('shift,guided_trials,checked_in_at,users(full_name),touch_points!inner(name,city)')
+    .eq('work_date',today).eq('touch_points.city',city).order('checked_in_at');
+  $('attList').innerHTML=(att&&att.length)?att.map(a=>`
+    <div class="sale-item"><div><b>${a.users.full_name}</b>
+      <div class="meta">${a.touch_points.name.split('_')[1]||a.touch_points.name} · ${a.shift==='day'?'نهاري ☀️':'ليلي 🌙'} · ${new Date(a.checked_in_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>
+    </div><span style="font-size:11px;color:var(--muted)">GT: ${a.guided_trials}</span></div>`).join('')
+    :'<div class="spin">لا حضور مسجل اليوم</div>';
+  // sales grouped by promoter
+  const{data:sales}=await db.from('sell_operations')
+    .select('sale_type,promoter_id,users(full_name),attendance!inner(touch_points!inner(city))')
+    .gte('created_at',today+'T00:00:00').eq('attendance.touch_points.city',city);
+  const by={};
+  (sales||[]).forEach(s=>{
+    const n=s.users.full_name;
+    by[n]=by[n]||{t:0,sk:0,mgm:0,ld:0};
+    by[n].t++;
+    if(s.sale_type==='SK'||s.sale_type==='SK+MGM')by[n].sk++;
+    if(s.sale_type==='MGM'||s.sale_type==='SK+MGM')by[n].mgm++;
+    if(s.sale_type==='LD')by[n].ld++;
+  });
+  const names=Object.keys(by).sort((a,b)=>by[b].t-by[a].t);
+  $('promoSales').innerHTML=names.length?names.map(n=>`
+    <div class="sale-item"><div><b>${n}</b>
+      <div class="meta">SK: ${by[n].sk} · MGM: ${by[n].mgm} · LD: ${by[n].ld}</div>
+    </div><span style="font-size:18px;font-weight:800;color:var(--gold)">${by[n].t}</span></div>`).join('')
+    :'<div class="spin">لا مبيعات اليوم</div>';
+}
+let tgOutlets=[];
+async function loadTargetsEditor(){
+  $('targetsSection').classList.remove('hidden');
+  const[{data:tps},{data:tgs}]=await Promise.all([
+    db.from('touch_points').select('*').eq('active',true).order('name'),
+    db.from('targets').select('*')
+  ]);
+  tgOutlets=tps||[];
+  const tmap={};(tgs||[]).forEach(t=>tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target));
+  $('targetsList').innerHTML=tgOutlets.map(tp=>{
+    const short=tp.name.split('_')[1]||tp.name;
+    let rows=`<div class="stock-row"><span>${short} — نهاري</span><input type="text" inputmode="decimal" id="tg-${tp.id}-day" value="${tmap[tp.id+'-day']??''}" placeholder="0.0"></div>`;
+    if(tp.dual_shift)rows+=`<div class="stock-row"><span>${short} — ليلي</span><input type="text" inputmode="decimal" id="tg-${tp.id}-night" value="${tmap[tp.id+'-night']??''}" placeholder="0.0"></div>`;
+    return rows;
+  }).join('');
+}
+async function saveTargets(){
+  $('tgBtn').disabled=true;
+  const rows=[];
+  tgOutlets.forEach(tp=>{
+    ['day','night'].forEach(sh=>{
+      const el=$('tg-'+tp.id+'-'+sh);
+      if(el&&el.value.trim()!=='')rows.push({touch_point_id:tp.id,shift:sh,daily_target:parseFloat(el.value)||0});
+    });
+  });
+  const{error}=await db.from('targets').upsert(rows,{onConflict:'touch_point_id,shift'});
+  $('tgBtn').disabled=false;
+  if(error)return msg('tgMsg','خطأ في الحفظ','err');
+  msg('tgMsg',`تم حفظ ${rows.length} هدف 🎯`,'ok');
 }
 
 // Enter key + session restore

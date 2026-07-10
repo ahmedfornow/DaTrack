@@ -135,7 +135,7 @@
       </div>
       <div class="card">
         <h2>📄 تقرير نهاية الدوام</h2>
-        <label>عدد الـ Guided Trials</label>
+        <label id="gtLabel">عدد الـ Guided Trials</label>
         <input type="tel" inputmode="numeric" id="gtInput" placeholder="0">
         <button onclick="genReport()">توليد التقرير 📄</button>
         <div id="reportWrap" class="hidden">
@@ -187,7 +187,7 @@
       <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🛒 مبيعات المندوبين اليوم</h2>
       <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
       <div id="targetsSection" class="hidden">
-        <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🎯 الأهداف اليومية (لكل موقع/فترة)</h2>
+        <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🎯 أهداف شهر <span id="tgMonth"></span> — تُحدد مرة واحدة</h2>
         <div id="targetsList"><div class="spin">جاري التحميل...</div></div>
         <button onclick="saveTargets()" id="tgBtn">حفظ الأهداف 🎯</button>
         <div class="msg" id="tgMsg"></div>
@@ -213,6 +213,9 @@ const DEVICES = {
 };
 const DEV_SHORT = {'ILUMA i Prime':'PRIME','ILUMA i':'ILUMA i','ILUMA i One':'ONE'};
 const TYPES = ['SK','MGM','SK+MGM','LD'];
+const curMonth=()=>new Date().toISOString().slice(0,7);
+const MONTH_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const curMonthName=()=>MONTH_AR[new Date().getMonth()]+' '+new Date().getFullYear();
 const CUSTS = ['LAS','LAU'];
 
 let profile=null, touchPoints=[], chosenShift='day', attendance=null;
@@ -290,8 +293,10 @@ async function openWork(){
   loadTodaySales();
 }
 async function loadMyTarget(){
-  const{data}=await db.from('targets').select('daily_target').eq('touch_point_id',attendance.touch_point_id).eq('shift',attendance.shift).maybeSingle();
+  const{data}=await db.from('targets').select('daily_target,gt_target').eq('touch_point_id',attendance.touch_point_id).eq('shift',attendance.shift).eq('month',curMonth()).maybeSingle();
   $('cTarget').textContent=data?Number(data.daily_target):'—';
+  window.myGtTarget=data?Number(data.gt_target):null;
+  if(window.myGtTarget!=null)$('gtLabel').textContent=`عدد الـ Guided Trials (الهدف: ${window.myGtTarget})`;
 }
 function showTab(t){
   ['Sales','Stock','Check'].forEach(x=>{
@@ -493,18 +498,24 @@ async function loadDashLists(city,today){
 let tgOutlets=[];
 async function loadTargetsEditor(){
   $('targetsSection').classList.remove('hidden');
+  $('tgMonth').textContent=curMonthName();
   const[{data:tps},{data:tgs}]=await Promise.all([
-    db.from('touch_points').select('*').eq('active',true).order('name'),
-    db.from('targets').select('*')
+    db.from('touch_points').select('*').eq('active',true).eq('city',profile.city).order('name'),
+    db.from('targets').select('*').eq('month',curMonth())
   ]);
   tgOutlets=tps||[];
-  const tmap={};(tgs||[]).forEach(t=>tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target));
-  $('targetsList').innerHTML=tgOutlets.map(tp=>{
-    const short=tp.name.split('_')[1]||tp.name;
-    let rows=`<div class="stock-row"><span>${short} — نهاري</span><input type="text" inputmode="decimal" id="tg-${tp.id}-day" value="${tmap[tp.id+'-day']??''}" placeholder="0.0"></div>`;
-    if(tp.dual_shift)rows+=`<div class="stock-row"><span>${short} — ليلي</span><input type="text" inputmode="decimal" id="tg-${tp.id}-night" value="${tmap[tp.id+'-night']??''}" placeholder="0.0"></div>`;
-    return rows;
-  }).join('');
+  const tmap={},gmap={};(tgs||[]).forEach(t=>{tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target);gmap[t.touch_point_id+'-'+t.shift]=Number(t.gt_target)});
+  const row=(tp,sh,lbl)=>`<div class="stock-row"><span>${(tp.name.split('_')[1]||tp.name)} — ${lbl}</span>
+    <span style="display:flex;gap:6px">
+      <input type="text" inputmode="decimal" id="tg-${tp.id}-${sh}" value="${tmap[tp.id+'-'+sh]??''}" placeholder="مبيعات" style="width:72px">
+      <input type="text" inputmode="decimal" id="gt-${tp.id}-${sh}" value="${gmap[tp.id+'-'+sh]??''}" placeholder="GT" style="width:60px">
+    </span></div>`;
+  $('targetsList').innerHTML='<div class="stock-row" style="border:none"><span style="color:var(--muted);font-size:11px">الموقع</span><span style="display:flex;gap:6px;color:var(--muted);font-size:11px"><span style="width:72px;text-align:center">هدف مبيعات</span><span style="width:60px;text-align:center">هدف GT</span></span></div>'+
+    tgOutlets.map(tp=>{
+      let rows=row(tp,'day','نهاري');
+      if(tp.dual_shift)rows+=row(tp,'night','ليلي');
+      return rows;
+    }).join('');
 }
 async function saveTargets(){
   $('tgBtn').disabled=true;
@@ -512,13 +523,14 @@ async function saveTargets(){
   tgOutlets.forEach(tp=>{
     ['day','night'].forEach(sh=>{
       const el=$('tg-'+tp.id+'-'+sh);
-      if(el&&el.value.trim()!=='')rows.push({touch_point_id:tp.id,shift:sh,daily_target:parseFloat(el.value)||0});
+      const gel=$('gt-'+tp.id+'-'+sh);
+      if(el&&el.value.trim()!=='')rows.push({touch_point_id:tp.id,shift:sh,daily_target:parseFloat(el.value)||0,gt_target:gel&&gel.value.trim()!==''?parseFloat(gel.value)||0:0,month:curMonth()});
     });
   });
-  const{error}=await db.from('targets').upsert(rows,{onConflict:'touch_point_id,shift'});
+  const{error}=await db.from('targets').upsert(rows,{onConflict:'touch_point_id,shift,month'});
   $('tgBtn').disabled=false;
   if(error)return msg('tgMsg','خطأ في الحفظ','err');
-  msg('tgMsg',`تم حفظ ${rows.length} هدف 🎯`,'ok');
+  msg('tgMsg',`تم حفظ أهداف الشهر (${rows.length}) 🎯`,'ok');
 }
 
 // Enter key + session restore

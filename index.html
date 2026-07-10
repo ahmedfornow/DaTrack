@@ -3,69 +3,79 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>GMB Field</title>
+<title>DaTracker | Your Report Assistant</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;700&display=swap');
   :root {
-    --bg:#0f1419; --card:#1a2129; --card2:#212a35; --gold:#c9a961;
-    --text:#e8e6e3; --muted:#8b95a1; --green:#2ecc71; --red:#e74c3c;
-    --blue:#3498db; --radius:14px;
+    --bg:#07090d; --card:#10141b; --card2:#161b24;
+    --gold:#d8bd84; --gold-hi:#e8d7ab; --gold-lo:#b3915c;
+    --line:rgba(216,189,132,.16); --line-soft:rgba(216,189,132,.08);
+    --text:#eceae4; --muted:#8a93a3;
+    --green:#3ddc97; --red:#e5604f; --radius:16px;
   }
-  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif;-webkit-tap-highlight-color:transparent}
-  body{background:var(--bg);color:var(--text);min-height:100vh;padding:16px;display:flex;justify-content:center}
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{background:radial-gradient(1200px 600px at 50% -10%, #0d1219 0%, var(--bg) 55%);color:var(--text);min-height:100vh;padding:18px 16px;display:flex;justify-content:center}
   .container{width:100%;max-width:440px}
-  .logo{text-align:center;margin:12px 0 22px}
-  .logo h1{font-size:24px;color:var(--gold);letter-spacing:1px}
-  .logo p{color:var(--muted);font-size:12px;margin-top:2px}
-  .card{background:var(--card);border-radius:var(--radius);padding:20px;border:1px solid #2a3441;margin-bottom:14px}
-  .card h2{font-size:17px;margin-bottom:16px}
-  label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
-  input,select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:16px;text-align:center;letter-spacing:2px}
-  select{text-align:right;letter-spacing:0}
-  input:focus,select:focus{outline:none;border-color:var(--gold)}
-  button{width:100%;padding:13px;margin-top:16px;border:none;border-radius:10px;background:var(--gold);color:#14181d;font-size:15px;font-weight:700;cursor:pointer}
-  button:disabled{opacity:.5}
-  .msg{margin-top:12px;padding:11px;border-radius:10px;font-size:13px;text-align:center;display:none}
-  .msg.err{display:block;background:rgba(231,76,60,.12);color:var(--red);border:1px solid rgba(231,76,60,.3)}
-  .msg.ok{display:block;background:rgba(46,204,113,.12);color:var(--green);border:1px solid rgba(46,204,113,.3)}
+  .logo{text-align:center;margin:14px 0 26px}
+  .logo h1{font-size:27px;letter-spacing:.5px;font-weight:300;color:var(--text)}
+  .logo h1 b{font-weight:700;background:linear-gradient(120deg,var(--gold-hi),var(--gold-lo));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .logo p{color:var(--muted);font-size:11.5px;margin-top:5px;letter-spacing:2.5px;text-transform:uppercase}
+  .logo::after{content:'';display:block;width:56px;height:1px;margin:14px auto 0;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+  .card{background:linear-gradient(180deg,#131924 0%,var(--card) 100%);border-radius:var(--radius);padding:22px;border:1px solid var(--line);margin-bottom:14px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+  .card h2{font-size:16px;margin-bottom:16px;font-weight:500;letter-spacing:.3px}
+  label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 6px;letter-spacing:.3px}
+  input,select,textarea{width:100%;padding:12px 14px;border-radius:11px;border:1px solid var(--line-soft);background:var(--card2);color:var(--text);font-size:16px;text-align:center;letter-spacing:2px;transition:border-color .15s}
+  select,textarea{text-align:right;letter-spacing:0}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  button{width:100%;padding:13px;margin-top:16px;border:none;border-radius:11px;background:linear-gradient(135deg,var(--gold-hi) 0%,var(--gold) 45%,var(--gold-lo) 100%);color:#12100a;font-size:15px;font-weight:700;letter-spacing:.4px;cursor:pointer;box-shadow:0 6px 18px rgba(216,189,132,.18);transition:transform .12s,box-shadow .12s}
+  button:active{transform:translateY(1px);box-shadow:0 3px 10px rgba(216,189,132,.12)}
+  button:disabled{opacity:.45;cursor:wait}
+  .msg{margin-top:12px;padding:11px;border-radius:11px;font-size:13px;text-align:center;display:none}
+  .msg.err{display:block;background:rgba(229,96,79,.1);color:var(--red);border:1px solid rgba(229,96,79,.28)}
+  .msg.ok{display:block;background:rgba(61,220,151,.08);color:var(--green);border:1px solid rgba(61,220,151,.25)}
   .hidden{display:none!important}
-  .welcome{font-size:14px;color:var(--muted)}
-  .pname{font-size:18px;font-weight:700;color:var(--gold);margin-bottom:14px}
+  .welcome{font-size:13.5px;color:var(--muted)}
+  .pname{font-size:19px;font-weight:700;color:var(--gold);margin-bottom:14px}
   .shift-row{display:flex;gap:10px;margin-top:6px}
-  .opt-btn{flex:1;padding:12px 6px;border-radius:10px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:14px;cursor:pointer;text-align:center;transition:all .12s}
-  .opt-btn.active{border-color:var(--gold);background:rgba(201,169,97,.15);color:var(--gold);font-weight:700}
+  .opt-btn{flex:1;padding:12px 6px;border-radius:11px;border:1px solid var(--line-soft);background:var(--card2);color:var(--text);font-size:13.5px;cursor:pointer;text-align:center;transition:all .13s}
+  .opt-btn.active{border-color:var(--gold);background:rgba(216,189,132,.1);color:var(--gold);font-weight:700;box-shadow:inset 0 0 0 1px rgba(216,189,132,.25)}
   .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
   .opt-grid.g3{grid-template-columns:1fr 1fr 1fr}
-  .logout{background:transparent;border:1px solid #2f3b4a;color:var(--muted);margin-top:10px;font-weight:400;font-size:13px}
-  /* tabs */
+  .logout{background:transparent;border:1px solid var(--line-soft);color:var(--muted);margin-top:10px;font-weight:400;font-size:13px;box-shadow:none}
   .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-  .topbar .info{font-size:12px;color:var(--muted);line-height:1.5}
-  .topbar .info b{color:var(--gold)}
-  .exit{background:transparent;border:1px solid #2f3b4a;color:var(--muted);width:auto;padding:8px 14px;margin:0;font-size:12px;font-weight:400}
+  .topbar .info{font-size:12px;color:var(--muted);line-height:1.6}
+  .topbar .info b{color:var(--gold);font-size:13.5px}
+  .exit{background:transparent;border:1px solid var(--line-soft);color:var(--muted);width:auto;padding:8px 14px;margin:0;font-size:12px;font-weight:400;box-shadow:none}
   .tabs{display:flex;gap:6px;margin-bottom:14px}
-  .tab{flex:1;padding:11px 4px;text-align:center;border-radius:10px;background:var(--card);border:1px solid #2a3441;color:var(--muted);font-size:13px;cursor:pointer}
-  .tab.active{background:rgba(201,169,97,.15);border-color:var(--gold);color:var(--gold);font-weight:700}
-  .counter{display:flex;justify-content:space-around;background:var(--card2);border-radius:10px;padding:12px;margin-bottom:14px}
-  .counter div{text-align:center}
-  .counter .num{font-size:22px;font-weight:800;color:var(--gold)}
-  .counter .lbl{font-size:11px;color:var(--muted)}
-  .sale-item{display:flex;justify-content:space-between;align-items:center;background:var(--card2);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px}
-  .sale-item .del{background:transparent;border:none;color:var(--red);font-size:17px;width:auto;margin:0;padding:4px 8px;cursor:pointer}
-  .sale-item .meta{color:var(--muted);font-size:11px;margin-top:2px}
-  .stock-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #232d39}
+  .tab{flex:1;padding:11px 4px;text-align:center;border-radius:11px;background:var(--card);border:1px solid var(--line-soft);color:var(--muted);font-size:12.5px;cursor:pointer;transition:all .13s}
+  .tab.active{background:rgba(216,189,132,.1);border-color:var(--gold);color:var(--gold);font-weight:700}
+  .counter{display:flex;justify-content:space-around;background:linear-gradient(180deg,#171d28,#131822);border:1px solid var(--line-soft);border-radius:13px;padding:14px 8px;margin-bottom:14px}
+  .counter div{text-align:center;flex:1}
+  .counter div+div{border-right:1px solid var(--line-soft)}
+  .counter .num{font-size:22px;font-weight:700;color:var(--gold)}
+  .counter .lbl{font-size:10.5px;color:var(--muted);margin-top:2px;letter-spacing:.3px}
+  .sale-item{display:flex;justify-content:space-between;align-items:center;background:var(--card2);border:1px solid var(--line-soft);border-radius:11px;padding:11px 13px;margin-top:8px;font-size:13px}
+  .sale-item .del{background:transparent;border:none;color:var(--red);font-size:16px;width:auto;margin:0;padding:4px 8px;cursor:pointer;box-shadow:none}
+  .sale-item .meta{color:var(--muted);font-size:11px;margin-top:3px}
+  .stock-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line-soft)}
   .stock-row span{font-size:13px}
   .stock-row input{width:80px;padding:8px;font-size:15px}
-  .cat-title{color:var(--gold);font-size:13px;font-weight:700;margin:14px 0 4px}
-  .chk-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #232d39;cursor:pointer}
-  .chk-box{width:26px;height:26px;border-radius:7px;border:2px solid #2f3b4a;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--green);flex-shrink:0}
-  .chk-row.done .chk-box{border-color:var(--green);background:rgba(46,204,113,.12)}
+  .cat-title{color:var(--gold);font-size:12.5px;font-weight:700;margin:14px 0 4px;letter-spacing:.8px}
+  .chk-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-soft);cursor:pointer}
+  .chk-box{width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--green);flex-shrink:0;transition:all .13s}
+  .chk-row.done .chk-box{border-color:var(--green);background:rgba(61,220,151,.1)}
   .chk-row span{font-size:14px}
-  .spin{text-align:center;color:var(--muted);padding:20px;font-size:13px}
+  .spin{text-align:center;color:var(--muted);padding:18px;font-size:13px}
+  .sec-h{font-size:14px;margin:20px 0 8px;color:var(--gold);letter-spacing:.4px;font-weight:500;display:flex;align-items:center;gap:8px}
+  .sec-h::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <div class="container">
-  <div class="logo"><h1>GMB FIELD</h1><p>نظام تقارير الفريق الميداني</p></div>
+  <div class="logo"><h1>Da<b>Tracker</b></h1><p>Your Report Assistant</p></div>
 
   <!-- LOGIN -->
   <div class="card" id="loginCard">
@@ -193,19 +203,33 @@
       <div><div class="num" id="sAtt">—</div><div class="lbl">حضور اليوم</div></div>
     </div>
     <div style="margin-top:10px">
-      <h2 style="font-size:15px;margin:14px 0 8px;color:var(--gold)">📋 حضور اليوم</h2>
+      <h2 class="sec-h">📋 الحضور</h2>
       <div id="attList"><div class="spin">جاري التحميل...</div></div>
-      <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🛒 مبيعات المندوبين</h2>
+      <h2 class="sec-h">🛒 مبيعات المندوبين</h2>
       <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
-      <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">📍 مبيعات المواقع</h2>
+      <h2 class="sec-h">📍 مبيعات المواقع</h2>
       <div id="outletSales"><div class="spin">جاري التحميل...</div></div>
       <button onclick="genSummary()" style="margin-top:14px">📋 توليد ملخص الفترة</button>
       <div id="sumWrap" class="hidden">
         <textarea id="sumBox" style="width:100%;min-height:220px;margin-top:10px;padding:12px;border-radius:10px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;direction:ltr;font-family:monospace"></textarea>
         <button onclick="copySummary()" id="copySumBtn">نسخ الملخص 📋</button>
       </div>
+      <h2 class="sec-h">📦 جرد المواقع (الفترة)</h2>
+      <div id="stockView"><div class="spin">جاري التحميل...</div></div>
+      <h2 class="sec-h">✅ التشيك ليست اليوم</h2>
+      <div id="checkView"><div class="spin">جاري التحميل...</div></div>
+      <h2 class="sec-h">🕐 آخر العمليات</h2>
+      <div id="salesFeed"><div class="spin">جاري التحميل...</div></div>
+      <div id="clManage" class="hidden">
+        <h2 class="sec-h">🛠️ إدارة بنود التشيك ليست</h2>
+        <div id="clItems"></div>
+        <label>إضافة بند جديد</label>
+        <input type="text" id="newClItem" style="text-align:right;letter-spacing:0" placeholder="اكتب البند...">
+        <button onclick="addClItem()">إضافة البند ➕</button>
+        <div class="msg" id="clMsg"></div>
+      </div>
       <div id="targetsSection" class="hidden">
-        <h2 style="font-size:15px;margin:18px 0 8px;color:var(--gold)">🎯 أهداف شهر <span id="tgMonth"></span> — تُحدد مرة واحدة</h2>
+        <h2 class="sec-h">🎯 أهداف شهر <span id="tgMonth"></span></h2>
         <div id="targetsList"><div class="spin">جاري التحميل...</div></div>
         <button onclick="saveTargets()" id="tgBtn">حفظ الأهداف 🎯</button>
         <div class="msg" id="tgMsg"></div>
@@ -555,12 +579,95 @@ async function loadDashLists(city,start){
   // cache for summary
   const gtTotal=(att||[]).reduce((a,x)=>a+(x.guided_trials||0),0);
   window.dashData={by,byOut,total:(sales||[]).length,gt:gtTotal,att:(att||[]).length,city,start};
+  loadStockView(city,start);
+  loadCheckView(city);
+  loadSalesFeed(city,start);
+  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager()}
+}
+async function loadStockView(city,start){
+  const{data}=await db.from('stock_reports')
+    .select('quantity,reported_at,stock_catalog(item_name),attendance!inner(shift,touch_points!inner(name,city))')
+    .gte('reported_at',start+'T00:00:00').eq('attendance.touch_points.city',city).order('reported_at',{ascending:false});
+  const byO={};
+  (data||[]).forEach(r=>{
+    const o=r.attendance.touch_points.name;
+    byO[o]=byO[o]||[];
+    byO[o].push(r);
+  });
+  const outs=Object.keys(byO);
+  $('stockView').innerHTML=outs.length?outs.map((o,i)=>`
+    <div class="sale-item" style="cursor:pointer" onclick="document.getElementById('stkd-${i}').classList.toggle('hidden')">
+      <div><b>${o.split('_')[1]||o}</b>
+        <div class="meta">${byO[o].length} صنف · آخر تحديث ${new Date(byO[o][0].reported_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div><span style="color:var(--muted);font-size:12px">عرض ▾</span></div>
+    <div id="stkd-${i}" class="hidden" style="padding:4px 12px;font-size:12px;color:var(--muted)">
+      ${byO[o].map(r=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line-soft)"><span>${r.stock_catalog.item_name.replace('IQOS ILUMA i ','').replace('IQOS ','')}</span><b style="color:var(--text)">${r.quantity}</b></div>`).join('')}
+    </div>`).join('')
+    :'<div class="spin">لا جرد في الفترة</div>';
+}
+async function loadCheckView(city){
+  const today=new Date().toISOString().slice(0,10);
+  const[{data:items},{data:resp}]=await Promise.all([
+    db.from('checklist_items').select('id').eq('active',true),
+    db.from('checklist_responses').select('promoter_id,checked,users(full_name)').eq('work_date',today)
+  ]);
+  const total=(items||[]).length;
+  const byP={};
+  (resp||[]).forEach(r=>{
+    const n=r.users.full_name;
+    byP[n]=byP[n]||0;
+    if(r.checked)byP[n]++;
+  });
+  const names=Object.keys(byP);
+  $('checkView').innerHTML=names.length?names.map(n=>`
+    <div class="sale-item"><b>${n}</b>
+      <span style="font-weight:700;color:${byP[n]===total?'var(--green)':'var(--gold)'}">${byP[n]}/${total}</span>
+    </div>`).join('')
+    :'<div class="spin">لا استجابات اليوم</div>';
+}
+async function loadSalesFeed(city,start){
+  const{data}=await db.from('sell_operations')
+    .select('id,device_type,color,sale_type,customer_type,created_at,users(full_name),attendance!inner(touch_points!inner(name,city))')
+    .gte('created_at',start+'T00:00:00').eq('attendance.touch_points.city',city)
+    .order('created_at',{ascending:false}).limit(20);
+  const canDel=profile.role==='supervisor';
+  $('salesFeed').innerHTML=(data&&data.length)?data.map(s=>`
+    <div class="sale-item"><div><b>${s.users.full_name}</b> — ${DEV_SHORT[s.device_type]||s.device_type} ${s.color}
+      <div class="meta">${s.sale_type} · ${s.customer_type} · ${(s.attendance.touch_points.name.split('_')[1]||'')} · ${new Date(s.created_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>
+    </div>${canDel?`<button class="del" onclick="supDelSale(${s.id})">🗑️</button>`:''}</div>`).join('')
+    :'<div class="spin">لا عمليات في الفترة</div>';
+}
+async function supDelSale(id){
+  if(!confirm('حذف هذه العملية نهائياً؟'))return;
+  await db.from('sell_operations').delete().eq('id',id);
+  loadStaffCounts();
+}
+async function loadClManager(){
+  const{data}=await db.from('checklist_items').select('*').eq('active',true).order('sort_order');
+  $('clItems').innerHTML=(data||[]).map(it=>`
+    <div class="sale-item"><span style="font-size:13px">${it.title}</span>
+      <button class="del" onclick="delClItem(${it.id})">✖</button>
+    </div>`).join('')||'<div class="spin">لا بنود</div>';
+}
+async function addClItem(){
+  const t=$('newClItem').value.trim();
+  if(!t)return msg('clMsg','اكتب البند أولاً','err');
+  const{error}=await db.from('checklist_items').insert({title:t,created_by:profile.id});
+  if(error)return msg('clMsg','خطأ في الإضافة','err');
+  $('newClItem').value='';
+  msg('clMsg','تمت الإضافة ✅','ok');
+  loadClManager();
+}
+async function delClItem(id){
+  if(!confirm('إيقاف هذا البند؟'))return;
+  await db.from('checklist_items').update({active:false}).eq('id',id);
+  loadClManager();
 }
 function genSummary(){
   const d=window.dashData;if(!d)return;
   const today=new Date().toISOString().slice(0,10);
   const lbl=staffPeriod==='today'?'Daily':staffPeriod==='week'?'Weekly':'Monthly';
-  const lines=[`GMB ${d.city} — ${lbl} Summary`,`${d.start} → ${today}`,''];
+  const lines=[`DaTracker — ${d.city} · ${lbl} Summary`,`${d.start} → ${today}`,''];
   let sk=0,mgm=0,ld=0;Object.values(d.by).forEach(v=>{sk+=v.sk;mgm+=v.mgm;ld+=v.ld});
   lines.push(`Total sales : ${d.total}`);
   lines.push(`SK: ${sk} | MGM: ${mgm} | LD: ${ld}`);

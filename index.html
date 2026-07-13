@@ -255,6 +255,20 @@
       <div id="checkView"><div class="spin">جاري التحميل...</div></div>
       <h2 class="sec-h">🕐 آخر العمليات</h2>
       <div id="salesFeed"><div class="spin">جاري التحميل...</div></div>
+      <div id="tpManage" class="hidden">
+        <h2 class="sec-h">🏪 إدارة المواقع</h2>
+        <div id="tpList"></div>
+        <label>إضافة موقع جديد</label>
+        <input type="text" id="ntpName" style="text-align:right;letter-spacing:0" placeholder="اسم الموقع (فريد)">
+        <input type="text" id="ntpMaps" style="text-align:left;letter-spacing:0;direction:ltr;margin-top:8px" placeholder="رابط Google Maps (اختياري)">
+        <label>دوامين (نهاري + ليلي)؟</label>
+        <div class="shift-row">
+          <div class="opt-btn active" id="ntpDual-no" onclick="ntpDual(false)">لا — نهاري فقط</div>
+          <div class="opt-btn" id="ntpDual-yes" onclick="ntpDual(true)">نعم — دوامين</div>
+        </div>
+        <button onclick="addTp()">إضافة الموقع ➕</button>
+        <div class="msg" id="tpMsg"></div>
+      </div>
       <div id="clManage" class="hidden">
         <h2 class="sec-h">🛠️ إدارة بنود التشيك ليست</h2>
         <div id="clItems"></div>
@@ -262,6 +276,19 @@
         <input type="text" id="newClItem" style="text-align:right;letter-spacing:0" placeholder="اكتب البند...">
         <button onclick="addClItem()">إضافة البند ➕</button>
         <div class="msg" id="clMsg"></div>
+      </div>
+      <div id="tpManage" class="hidden">
+        <h2 class="sec-h">🏪 إدارة المواقع</h2>
+        <div id="tpList"></div>
+        <label>إضافة موقع جديد</label>
+        <input type="text" id="ntpName" style="text-align:right;letter-spacing:0" placeholder="اسم الموقع (مثال: QAS_..._MN_BR)">
+        <input type="text" id="ntpMaps" style="text-align:right;letter-spacing:0;margin-top:8px" placeholder="رابط Google Maps (اختياري)">
+        <div class="shift-row" style="margin-top:8px">
+          <div class="opt-btn active" id="ntpSingle" onclick="ntpDual(false)">فترة واحدة ☀️</div>
+          <div class="opt-btn" id="ntpDualB" onclick="ntpDual(true)">دوامين ☀️🌙</div>
+        </div>
+        <button onclick="addOutlet()">إضافة الموقع ➕</button>
+        <div class="msg" id="tpMsg"></div>
       </div>
       <div id="targetsSection" class="hidden">
         <h2 class="sec-h">🎯 أهداف شهر <span id="tgMonth"></span></h2>
@@ -762,7 +789,7 @@ async function loadDashLists(city,start){
   loadStockView(city,start);
   loadCheckView(city);
   loadSalesFeed(city,start);
-  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager()}
+  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager()}
 }
 // team curve
 let teamChartObj=null;
@@ -868,6 +895,66 @@ async function supDelSale(id){
   if(!confirm('حذف هذه العملية نهائياً؟'))return;
   await db.from('sell_operations').delete().eq('id',id);
   loadStaffCounts();
+}
+let ntpIsDual=false;
+function ntpDual(v){ntpIsDual=v;$('ntpSingle').classList.toggle('active',!v);$('ntpDualB').classList.toggle('active',v)}
+async function loadTpManager(){
+  const{data}=await db.from('touch_points').select('*').eq('city',profile.city).order('active',{ascending:false}).order('name');
+  $('tpList').innerHTML=(data||[]).map(tp=>`
+    <div class="sale-item" style="${tp.active?'':'opacity:.45'}">
+      <div><b>${tp.name.split('_')[1]||tp.name}</b>
+        <div class="meta">${tp.dual_shift?'دوامين ☀️🌙':'فترة واحدة ☀️'} · ${tp.active?'نشط':'موقوف'}${tp.maps_url?' · 📍':''}</div>
+      </div>
+      <button style="width:auto;margin:0;padding:7px 10px;font-size:11.5px;${tp.active?'background:transparent;border:1px solid var(--red);color:var(--red);box-shadow:none':''}" onclick="toggleOutlet(${tp.id},${!tp.active})">${tp.active?'إيقاف':'تفعيل ✓'}</button>
+    </div>`).join('')||'<div class="spin">لا مواقع</div>';
+}
+async function addOutlet(){
+  const n=$('ntpName').value.trim(),m=$('ntpMaps').value.trim();
+  if(!n)return msg('tpMsg','اكتب اسم الموقع','err');
+  const{error}=await db.from('touch_points').insert({name:n,maps_url:m||null,dual_shift:ntpIsDual,city:profile.city});
+  if(error){
+    if(error.code==='23505')return msg('tpMsg','يوجد موقع بنفس الاسم','err');
+    return msg('tpMsg','خطأ في الإضافة','err');
+  }
+  $('ntpName').value='';$('ntpMaps').value='';ntpDual(false);
+  msg('tpMsg','أُضيف الموقع ✅ — لا تنسَ تحديد هدفه','ok');
+  loadTpManager();loadTargetsEditor();
+}
+async function toggleOutlet(id,active){
+  if(!active&&!confirm('إيقاف هذا الموقع؟ يختفي من قوائم المندوبين وتبقى بياناته'))return;
+  await db.from('touch_points').update({active}).eq('id',id);
+  loadTpManager();loadTargetsEditor();
+}
+let ntpDualVal=false;
+function ntpDual(v){ntpDualVal=v;$('ntpDual-no').classList.toggle('active',!v);$('ntpDual-yes').classList.toggle('active',v)}
+async function loadTpManager(){
+  const{data}=await db.from('touch_points').select('*').eq('city',profile.city).order('active',{ascending:false}).order('name');
+  $('tpList').innerHTML=(data||[]).map(tp=>`
+    <div class="sale-item" style="${tp.active?'':'opacity:.45'}">
+      <div><b>${tp.name.split('_')[1]||tp.name}</b>
+        <div class="meta">${tp.dual_shift?'دوامين ☀️🌙':'نهاري ☀️'}${tp.maps_url?' · 📍 ماب':''} · ${tp.active?'نشط':'موقوف'}</div>
+      </div>
+      <button style="width:auto;margin:0;padding:6px 10px;font-size:11px;${tp.active?'background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none':''}" onclick="toggleTp(${tp.id},${!tp.active})">${tp.active?'إيقاف':'تفعيل ✓'}</button>
+    </div>`).join('')||'<div class="spin">لا مواقع</div>';
+}
+async function addTp(){
+  const n=$('ntpName').value.trim();
+  const m=$('ntpMaps').value.trim();
+  if(!n)return msg('tpMsg','اكتب اسم الموقع','err');
+  const{error}=await db.from('touch_points').insert({name:n,maps_url:m||null,dual_shift:ntpDualVal,city:profile.city});
+  if(error){
+    if(error.code==='23505')return msg('tpMsg','الاسم مستخدم مسبقاً — الأسماء فريدة','err');
+    return msg('tpMsg','خطأ في الإضافة','err');
+  }
+  $('ntpName').value='';$('ntpMaps').value='';ntpDual(false);
+  msg('tpMsg','أُضيف الموقع ✅ — لا تنسَ تحديد هدفه','ok');
+  loadTpManager();
+  window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;
+}
+async function toggleTp(id,active){
+  await db.from('touch_points').update({active}).eq('id',id);
+  loadTpManager();
+  window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;
 }
 async function loadClManager(){
   const{data}=await db.from('checklist_items').select('*').eq('active',true).order('sort_order');

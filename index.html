@@ -990,7 +990,7 @@ async function loadRoutePlan(){
   ]);
   rpOutlets=tps||[];rpPromoters=pros||[];
   const assigned={};(plan||[]).forEach(p=>assigned[p.touch_point_id+'-'+p.shift]=p.promoter_id);
-  const opts=sel=>'<option value="">— بدون —</option>'+rpPromoters.map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${p.full_name.split(' ').slice(0,2).join(' ')}</option>`).join('');
+  const opts=sel=>'<option value="">— بدون —</option>'+rpPromoters.map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${p.full_name}</option>`).join('');
   const row=(tp,sh,lbl)=>`<div class="stock-row"><span style="font-size:12.5px">${(tp.name.split('_')[1]||tp.name)} — ${lbl}</span>
     <select id="rp-${tp.id}-${sh}" style="width:160px;font-size:13px;padding:8px">${opts(assigned[tp.id+'-'+sh])}</select></div>`;
   $('rpSlots').innerHTML=rpOutlets.map(tp=>{
@@ -1028,7 +1028,7 @@ async function saveRoutePlan(){
 function genRouteMsg(){
   const dt=$('rpDate').value;
   const[y,mo,dd]=dt.split('-');
-  const name2=id=>{const p=rpPromoters.find(x=>x.id===id);return p?p.full_name.split(' ').slice(0,2).join(' '):'؟'};
+  const name2=id=>{const p=rpPromoters.find(x=>x.id===id);return p?p.full_name:'؟'};
   const blocks=[];const activeIds=new Set();
   rpOutlets.forEach(tp=>{
     const dEl=$('rp-'+tp.id+'-day'),nEl=$('rp-'+tp.id+'-night');
@@ -1055,7 +1055,7 @@ function genRouteMsg(){
   if(absent.length){
     lines.push('');
     lines.push('Absent:');
-    absent.forEach(p=>lines.push(`${p.full_name.split(' ').slice(0,2).join(' ')} ::: أوف`));
+    absent.forEach(p=>lines.push(`${p.full_name} ::: أوف`));
   }
   lines.push('');lines.push('');
   lines.push('🟰🟰🟰🟰🟰🟰');
@@ -1147,8 +1147,8 @@ async function loadTargetsEditor(){
     </span></div>`;
   $('targetsList').innerHTML='<div class="stock-row" style="border:none"><span style="color:var(--muted);font-size:11px">الموقع</span><span style="display:flex;gap:6px;color:var(--muted);font-size:11px"><span style="width:72px;text-align:center">هدف مبيعات</span><span style="width:60px;text-align:center">هدف GT</span></span></div>'+
     tgOutlets.map(tp=>{
-      let rows=row(tp,'day','Day');
-      if(tp.dual_shift)rows+=row(tp,'night','Night');
+      let rows=row(tp,'day','نهاري');
+      if(tp.dual_shift)rows+=row(tp,'night','ليلي');
       return rows;
     }).join('');
 }

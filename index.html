@@ -238,7 +238,7 @@
     <div class="chart-card"><canvas id="teamChart" height="190"></canvas></div>
     <button onclick="exportCSV()" style="margin-top:12px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">⬇️ تصدير سجل الشهر (CSV)</button>
     <div style="margin-top:10px">
-      <h2 class="sec-h">📆 اكتمال التسجيل (الشهر)</h2>
+      <h2 class="sec-h">📆 التسجيل + تحقيق الهدف (LAS)</h2>
       <div id="fillWidget"><div class="spin">جاري التحميل...</div></div>
       <h2 class="sec-h">📋 الحضور</h2>
       <div id="attList"><div class="spin">جاري التحميل...</div></div>
@@ -287,6 +287,11 @@
         <div class="shift-row">
           <div class="opt-btn active" id="ntpDual-no" onclick="ntpDual(false)">لا — نهاري فقط</div>
           <div class="opt-btn" id="ntpDual-yes" onclick="ntpDual(true)">نعم — دوامين</div>
+        </div>
+        <label>نوع الموقع</label>
+        <div class="shift-row">
+          <div class="opt-btn active" id="ntpDs-no" onclick="ntpDs(false)">عادي</div>
+          <div class="opt-btn" id="ntpDs-yes" onclick="ntpDs(true)">Direct Sales (DS)</div>
         </div>
         <label>هدف الشهر الحالي (اختياري)</label>
         <div class="shift-row">
@@ -605,13 +610,21 @@ async function submitStock(){
 function genStockMsg(){
   const[y,mo,dd]=session.work_date.split('-');
   const outlet=session.touch_points?session.touch_points.name:'';
-  const lines=[`جرد ${outlet} - ${dd}/${mo}/${y}`,`Shift : ${session.shift==='day'?'Day':'Night'}`,''];
-  let any=false;
-  stockCatalog.forEach(it=>{
-    const el=$('stk-'+it.id);
-    if(el&&el.value.trim()!==''){any=true;lines.push(`${it.item_name.replace('IQOS ILUMA i ','').replace('IQOS ','')}: ${el.value.trim()}`)}
-  });
-  if(!any)return msg('stockMsg','أدخل الكميات أولاً','err');
+  const val=id=>{const el=$('stk-'+id);return el&&el.value.trim()!==''?el.value.trim():''};
+  const find=frag=>stockCatalog.filter(it=>it.item_name.includes(frag));
+  const colorOnly=nm=>nm.split('—').pop().trim().toUpperCase();
+  const L=[`Date: ${dd}/${mo}/${y}`,`Outlet: ${outlet}`];
+  const grp=(header,items)=>{
+    L.push('________');L.push(header+':');
+    items.forEach(it=>L.push(`${colorOnly(it.item_name)}: ${val(it.id)}`));
+  };
+  grp('IQOS ILUMA PRIME i',find('PRIME'));
+  grp('IQOS ILUMA i',stockCatalog.filter(it=>it.item_name.includes('ILUMA i —')));
+  grp('IQOS ILUMA i ONE',find('ONE'));
+  // Starter kits = TEREA flavors
+  L.push('_______');L.push('STARTER KITS');L.push('');
+  find('TEREA').forEach(it=>L.push(`${it.item_name.replace('TEREA ','').toUpperCase()}: ${val(it.id)}`));
+  const lines=L;
   $('stockMsgBox').value=lines.join('\n');
   $('stockMsgWrap').classList.remove('hidden');
 }
@@ -770,19 +783,37 @@ async function loadStaffCounts(){
 }
 async function loadFillWidget(city){
   const m=curMonth(),elapsed=new Date().getDate();
-  const[{data:pros},{data:atts}]=await Promise.all([
+  const[{data:pros},{data:atts},{data:sales},{data:tgs}]=await Promise.all([
     db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).eq('city',city),
-    db.from('attendance').select('promoter_id,work_date').gte('work_date',m+'-01')
+    db.from('attendance').select('promoter_id,work_date,shift,touch_point_id,status').gte('work_date',m+'-01'),
+    db.from('sell_operations').select('promoter_id,customer_type,work_date').gte('work_date',m+'-01'),
+    db.from('targets').select('touch_point_id,shift,daily_target').eq('month',m)
   ]);
-  const days={};(atts||[]).forEach(a=>{(days[a.promoter_id]=days[a.promoter_id]||new Set()).add(a.work_date)});
-  const rows=(pros||[]).map(p=>({n:p.full_name,c:(days[p.id]||new Set()).size})).sort((a,b)=>a.c-b.c);
+  const tmap={};(tgs||[]).forEach(t=>tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target));
+  // days logged per promoter
+  const days={},tgt={};
+  (atts||[]).forEach(a=>{
+    (days[a.promoter_id]=days[a.promoter_id]||new Set()).add(a.work_date);
+    if(a.status==='work')tgt[a.promoter_id]=(tgt[a.promoter_id]||0)+(tmap[a.touch_point_id+'-'+a.shift]||0);
+  });
+  // LAS-only sales per promoter (only LAS counts toward target)
+  const las={};(sales||[]).forEach(s=>{if(s.customer_type==='LAS')las[s.promoter_id]=(las[s.promoter_id]||0)+1});
+  const rows=(pros||[]).map(p=>({
+    n:p.full_name,c:(days[p.id]||new Set()).size,
+    sales:las[p.id]||0,tg:Math.round((tgt[p.id]||0)*10)/10
+  })).sort((a,b)=>a.c-b.c);
   $('fillWidget').innerHTML=rows.length?rows.map(r=>{
     const full=r.c>=elapsed,pct=Math.round(r.c/elapsed*100);
     const col=full?'var(--green)':r.c>=elapsed*0.7?'var(--gold)':'var(--red)';
+    const ach=r.tg>0?Math.round(r.sales/r.tg*100):null;
+    const acol=ach==null?'var(--muted)':ach>=100?'var(--green)':ach>=70?'var(--gold)':'var(--red)';
     return `<div class="item" style="display:block">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <b>${full?'✅':'⚠️'} ${r.n}</b>
-        <span style="font-weight:700;color:${col}">${r.c}/${elapsed}</span>
+        <span style="display:flex;gap:10px;align-items:center">
+          <span style="font-weight:700;color:${col}">${r.c}/${elapsed}<span style="font-size:9px;color:var(--muted)"> يوم</span></span>
+          <span style="font-weight:700;color:${acol}">${r.sales}/${r.tg}${ach!=null?` · ${ach}%`:''}<span style="font-size:9px;color:var(--muted)"> LAS</span></span>
+        </span>
       </div>
       <div class="bar"><div style="width:${pct}%;background:${col}"></div></div>
     </div>`;
@@ -940,6 +971,8 @@ async function supDelSale(id){
 }
 let ntpDualVal=false;
 function ntpDual(v){ntpDualVal=v;$('ntpDual-no').classList.toggle('active',!v);$('ntpDual-yes').classList.toggle('active',v);$('ntpNightRow').classList.toggle('hidden',!v)}
+let ntpDsVal=false;
+function ntpDs(v){ntpDsVal=v;$('ntpDs-no').classList.toggle('active',!v);$('ntpDs-yes').classList.toggle('active',v)}
 
 // ---- ROUTE PLAN ----
 let rpOutlets=[],rpPromoters=[],rpInited=false;
@@ -997,27 +1030,40 @@ function genRouteMsg(){
   const dt=$('rpDate').value;
   const[y,mo,dd]=dt.split('-');
   const name2=id=>{const p=rpPromoters.find(x=>x.id===id);return p?p.full_name:'؟'};
-  const blocks=[];const activeIds=new Set();
+  const norm=[],ds=[];const activeIds=new Set();const dsActiveIds=new Set();
   rpOutlets.forEach(tp=>{
     const dEl=$('rp-'+tp.id+'-day'),nEl=$('rp-'+tp.id+'-night');
     const dv=dEl&&dEl.value?dEl.value:null;
     const nv=nEl&&nEl.value?nEl.value:null;
     if(!dv&&!nv)return;
-    if(dv)activeIds.add(dv);
-    if(nv)activeIds.add(nv);
-    const b=[];
-    if(tp.unicode)b.push(tp.unicode);
-    b.push(tp.name);
-    b.push('');
-    if(tp.maps_url){b.push(tp.maps_url);b.push('')}
-    if(dv)b.push('Day : '+name2(dv));
-    if(nv)b.push('Night : '+name2(nv));
-    blocks.push(b.join('\n'));
+    if(tp.is_ds){
+      // DS block: unicode + name + url + shifts, tallied separately
+      if(dv)dsActiveIds.add(dv);
+      if(nv)dsActiveIds.add(nv);
+      const b=[];
+      if(tp.unicode)b.push(tp.unicode);
+      b.push(tp.name);
+      if(tp.maps_url){b.push('');b.push(tp.maps_url)}
+      if(dv){b.push('');b.push('Day : '+name2(dv))}
+      if(nv)b.push('Night : '+name2(nv));
+      ds.push(b.join('\n'));
+    }else{
+      if(dv)activeIds.add(dv);
+      if(nv)activeIds.add(nv);
+      const b=[];
+      if(tp.unicode)b.push(tp.unicode);
+      b.push(tp.name);
+      if(tp.maps_url){b.push('');b.push(tp.maps_url)}
+      if(dv){b.push('');b.push('Day : '+name2(dv))}
+      if(nv)b.push('Night : '+name2(nv));
+      norm.push(b.join('\n'));
+    }
   });
-  if(!blocks.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
-  const absent=rpPromoters.filter(p=>!activeIds.has(p.id));
-  const lines=[profile.city,`${dd}/${mo}/${y}`,'',''];
-  lines.push(blocks.join('\n\n\n🟰🟰🟰🟰🟰🟰\n\n'));
+  if(!norm.length&&!ds.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
+  const allActive=new Set([...activeIds,...dsActiveIds]);
+  const absent=rpPromoters.filter(p=>!allActive.has(p.id));
+  const lines=[profile.city,`${dd}/${mo}/${y}`,''];
+  lines.push(norm.join('\n\n🟰🟰🟰🟰🟰🟰\n\n'));
   lines.push('');
   lines.push(`Total active : ${activeIds.size}`);
   if(absent.length){
@@ -1025,8 +1071,15 @@ function genRouteMsg(){
     lines.push('Absent:');
     absent.forEach(p=>lines.push(`${p.full_name} ::: أوف`));
   }
-  lines.push('');lines.push('');
-  lines.push('🟰🟰🟰🟰🟰🟰');
+  if(ds.length){
+    lines.push('');
+    lines.push('====DS====');
+    lines.push('');
+    lines.push(ds.join('\n\n'));
+    lines.push('');
+    lines.push(`Total active : ${dsActiveIds.size}`);
+    lines.push('off :');
+  }
   $('rpBox').value=lines.join('\n');
   $('rpMsgWrap').classList.remove('hidden');
 }
@@ -1036,22 +1089,50 @@ async function supDelAtt(id){
   if(error)return alert('لا يمكن الحذف — عليه مبيعات مسجلة. احذف مبيعاته من آخر العمليات أولاً.');
   loadStaffCounts();
 }
+let tpCache=[];
 async function loadTpManager(){
   const{data}=await db.from('touch_points').select('*').eq('city',profile.city).order('active',{ascending:false}).order('name');
-  $('tpList').innerHTML=(data||[]).map(tp=>`
-    <div class="sale-item" style="${tp.active?'':'opacity:.45'}">
-      <div><b>${tp.name.split('_')[1]||tp.name}</b>
-        <div class="meta">${tp.unicode?tp.unicode+' · ':''}${tp.dual_shift?'دوامين ☀️🌙':'نهاري ☀️'}${tp.maps_url?' · 📍 ماب':''} · ${tp.active?'نشط':'موقوف'}</div>
+  tpCache=data||[];
+  $('tpList').innerHTML=tpCache.map(tp=>`
+    <div class="sale-item" style="display:block;${tp.active?'':'opacity:.45'}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><b>${tp.name.split('_')[1]||tp.name}</b>
+          <div class="meta">${tp.unicode?tp.unicode+' · ':''}${tp.dual_shift?'دوامين ☀️🌙':'نهاري ☀️'}${tp.is_ds?' · 🏷️DS':''}${tp.maps_url?' · 📍':''} · ${tp.active?'نشط':'موقوف'}</div>
+        </div>
+        <span style="display:flex;gap:6px">
+          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="editTp(${tp.id})">✏️</button>
+          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none" onclick="toggleTp(${tp.id},${!tp.active})">${tp.active?'إيقاف':'تفعيل'}</button>
+        </span>
       </div>
-      <button style="width:auto;margin:0;padding:6px 10px;font-size:11px;${tp.active?'background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none':''}" onclick="toggleTp(${tp.id},${!tp.active})">${tp.active?'إيقاف':'تفعيل ✓'}</button>
+      <div id="ed-${tp.id}" class="hidden" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)">
+        <input type="text" id="ed-name-${tp.id}" value="${tp.name.replace(/"/g,'&quot;')}" style="text-align:right;letter-spacing:0;font-size:13px" placeholder="الاسم">
+        <input type="text" id="ed-code-${tp.id}" value="${tp.unicode||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="Unicode">
+        <input type="text" id="ed-maps-${tp.id}" value="${tp.maps_url||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="رابط الخريطة">
+        <div class="shift-row" style="margin-top:6px">
+          <div class="opt-btn ${tp.dual_shift?'active':''}" id="ed-dual-${tp.id}" onclick="this.classList.toggle('active')">دوامين</div>
+        </div>
+        <button style="margin-top:8px" onclick="saveTpEdit(${tp.id})">حفظ التعديل ✅</button>
+      </div>
     </div>`).join('')||'<div class="spin">لا مواقع</div>';
+}
+function editTp(id){$('ed-'+id).classList.toggle('hidden')}
+async function saveTpEdit(id){
+  const name=$('ed-name-'+id).value.trim();
+  if(!name)return msg('tpMsg','الاسم مطلوب','err');
+  const{error}=await db.from('touch_points').update({
+    name,unicode:$('ed-code-'+id).value.trim()||null,maps_url:$('ed-maps-'+id).value.trim()||null,
+    dual_shift:$('ed-dual-'+id).classList.contains('active')
+  }).eq('id',id);
+  if(error)return msg('tpMsg',error.code==='23505'?'الاسم مستخدم':'خطأ في التعديل','err');
+  msg('tpMsg','تم تعديل الموقع ✅','ok');
+  loadTpManager();window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;rpInited=false;
 }
 async function addTp(){
   const n=$('ntpName').value.trim();
   const m=$('ntpMaps').value.trim();
   const code=$('ntpCode').value.trim();
   if(!n)return msg('tpMsg','اكتب اسم الموقع','err');
-  const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,dual_shift:ntpDualVal,city:profile.city}).select().single();
+  const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,dual_shift:ntpDualVal,is_ds:ntpDsVal,city:profile.city}).select().single();
   if(error){
     if(error.code==='23505')return msg('tpMsg','الاسم مستخدم مسبقاً — الأسماء فريدة','err');
     return msg('tpMsg','خطأ: '+(error.message||'غير معروف')+(String(error.message).includes('unicode')?' — شغّل patch v8 أولاً!':''),'err');
@@ -1066,7 +1147,7 @@ async function addTp(){
   }
   if(tgRows.length)await db.from('targets').insert(tgRows);
   ['ntpName','ntpMaps','ntpCode','ntpTgDay','ntpGtDay','ntpTgNight','ntpGtNight'].forEach(i=>$(i).value='');
-  ntpDual(false);
+  ntpDual(false);ntpDs(false);
   msg('tpMsg',`أُضيف الموقع ✅${tgRows.length?' مع أهدافه 🎯':' — حدد هدفه لاحقاً'}`,'ok');
   loadTpManager();
   window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;

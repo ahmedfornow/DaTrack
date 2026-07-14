@@ -1031,7 +1031,7 @@ async function addTp(){
   const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,dual_shift:ntpDualVal,city:profile.city}).select().single();
   if(error){
     if(error.code==='23505')return msg('tpMsg','الاسم مستخدم مسبقاً — الأسماء فريدة','err');
-    return msg('tpMsg','خطأ في الإضافة','err');
+    return msg('tpMsg','خطأ: '+(error.message||'غير معروف')+(String(error.message).includes('unicode')?' — شغّل patch v8 أولاً!':''),'err');
   }
   // targets in same action (if provided)
   const tgRows=[];

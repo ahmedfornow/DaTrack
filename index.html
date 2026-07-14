@@ -238,6 +238,8 @@
     <div class="chart-card"><canvas id="teamChart" height="190"></canvas></div>
     <button onclick="exportCSV()" style="margin-top:12px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">⬇️ تصدير سجل الشهر (CSV)</button>
     <div style="margin-top:10px">
+      <h2 class="sec-h">📆 اكتمال التسجيل (الشهر)</h2>
+      <div id="fillWidget"><div class="spin">جاري التحميل...</div></div>
       <h2 class="sec-h">📋 الحضور</h2>
       <div id="attList"><div class="spin">جاري التحميل...</div></div>
       <h2 class="sec-h">🛒 مبيعات المندوبين</h2>
@@ -766,7 +768,28 @@ async function loadStaffCounts(){
   loadTeamAnalytics(city);
   if(profile.role==='supervisor'&&!window.tgLoaded){window.tgLoaded=true;loadTargetsEditor()}
 }
+async function loadFillWidget(city){
+  const m=curMonth(),elapsed=new Date().getDate();
+  const[{data:pros},{data:atts}]=await Promise.all([
+    db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).eq('city',city),
+    db.from('attendance').select('promoter_id,work_date').gte('work_date',m+'-01')
+  ]);
+  const days={};(atts||[]).forEach(a=>{(days[a.promoter_id]=days[a.promoter_id]||new Set()).add(a.work_date)});
+  const rows=(pros||[]).map(p=>({n:p.full_name,c:(days[p.id]||new Set()).size})).sort((a,b)=>a.c-b.c);
+  $('fillWidget').innerHTML=rows.length?rows.map(r=>{
+    const full=r.c>=elapsed,pct=Math.round(r.c/elapsed*100);
+    const col=full?'var(--green)':r.c>=elapsed*0.7?'var(--gold)':'var(--red)';
+    return `<div class="item" style="display:block">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b>${full?'✅':'⚠️'} ${r.n}</b>
+        <span style="font-weight:700;color:${col}">${r.c}/${elapsed}</span>
+      </div>
+      <div class="bar"><div style="width:${pct}%;background:${col}"></div></div>
+    </div>`;
+  }).join(''):'<div class="spin">لا مندوبين</div>';
+}
 async function loadDashLists(city,start){
+  loadFillWidget(city);
   const{data:att}=await db.from('attendance')
     .select('id,shift,status,guided_trials,checked_in_at,work_date,users(full_name),touch_points!inner(name,city)')
     .gte('work_date',start).eq('touch_points.city',city).order('checked_in_at');

@@ -255,16 +255,39 @@
       <div id="checkView"><div class="spin">جاري التحميل...</div></div>
       <h2 class="sec-h">🕐 آخر العمليات</h2>
       <div id="salesFeed"><div class="spin">جاري التحميل...</div></div>
+      <div id="routePlan" class="hidden">
+        <h2 class="sec-h">🗺️ خطة اليوم (Route Plan)</h2>
+        <label>تاريخ الخطة</label>
+        <input type="date" id="rpDate" style="text-align:center" onchange="loadRoutePlan()">
+        <div id="rpSlots" style="margin-top:6px"><div class="spin">جاري التحميل...</div></div>
+        <button onclick="saveRoutePlan()" id="rpBtn">حفظ الخطة 🗺️</button>
+        <button class="ghost" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="genRouteMsg()">توليد رسالة الخطة 📋</button>
+        <div id="rpMsgWrap" class="hidden">
+          <textarea id="rpBox" style="width:100%;min-height:220px;margin-top:10px;padding:12px;border-radius:11px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;text-align:right"></textarea>
+          <button onclick="copyText('rpBox',this)">نسخ للواتساب 📋</button>
+        </div>
+        <div class="msg" id="rpMsg"></div>
+      </div>
       <div id="tpManage" class="hidden">
         <h2 class="sec-h">🏪 إدارة المواقع</h2>
         <div id="tpList"></div>
         <label>إضافة موقع جديد</label>
         <input type="text" id="ntpName" style="text-align:right;letter-spacing:0" placeholder="اسم الموقع (فريد)">
+        <input type="text" id="ntpCode" style="text-align:left;letter-spacing:0;direction:ltr;margin-top:8px" placeholder="Unicode / كود الموقع (اختياري)">
         <input type="text" id="ntpMaps" style="text-align:left;letter-spacing:0;direction:ltr;margin-top:8px" placeholder="رابط Google Maps (اختياري)">
         <label>دوامين (نهاري + ليلي)؟</label>
         <div class="shift-row">
           <div class="opt-btn active" id="ntpDual-no" onclick="ntpDual(false)">لا — نهاري فقط</div>
           <div class="opt-btn" id="ntpDual-yes" onclick="ntpDual(true)">نعم — دوامين</div>
+        </div>
+        <label>هدف الشهر الحالي (اختياري)</label>
+        <div class="shift-row">
+          <input type="text" inputmode="decimal" id="ntpTgDay" placeholder="مبيعات نهاري">
+          <input type="text" inputmode="decimal" id="ntpGtDay" placeholder="GT نهاري">
+        </div>
+        <div class="shift-row hidden" id="ntpNightRow" style="margin-top:8px">
+          <input type="text" inputmode="decimal" id="ntpTgNight" placeholder="مبيعات ليلي">
+          <input type="text" inputmode="decimal" id="ntpGtNight" placeholder="GT ليلي">
         </div>
         <button onclick="addTp()">إضافة الموقع ➕</button>
         <div class="msg" id="tpMsg"></div>
@@ -276,6 +299,19 @@
         <input type="text" id="newClItem" style="text-align:right;letter-spacing:0" placeholder="اكتب البند...">
         <button onclick="addClItem()">إضافة البند ➕</button>
         <div class="msg" id="clMsg"></div>
+      </div>
+      <div id="routePlan" class="hidden">
+        <h2 class="sec-h">🗺️ خطة اليوم (Route Plan)</h2>
+        <label>تاريخ الخطة</label>
+        <input type="date" id="rpDate" style="text-align:center" onchange="loadRoutePlan()">
+        <div id="rpSlots" style="margin-top:6px"><div class="spin">جاري التحميل...</div></div>
+        <button onclick="saveRoutePlan()" id="rpBtn">حفظ الخطة 🗺️</button>
+        <button class="ghost" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="genRouteMsg()">توليد رسالة الخطة 📋</button>
+        <div id="rpMsgWrap" class="hidden">
+          <textarea id="rpBox" style="width:100%;min-height:220px;margin-top:10px;padding:12px;border-radius:11px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;text-align:right"></textarea>
+          <button onclick="copyText('rpBox',this)">نسخ للواتساب 📋</button>
+        </div>
+        <div class="msg" id="rpMsg"></div>
       </div>
       <div id="tpManage" class="hidden">
         <h2 class="sec-h">🏪 إدارة المواقع</h2>
@@ -369,7 +405,15 @@ async function promoterFlow(){
   touchPoints=tps||[];
   $('tpSelect').innerHTML=touchPoints.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
   $('tpSelect').onchange=updateShiftUI;
+  // pre-fill from today's route plan
+  const{data:plan}=await db.from('route_plans').select('touch_point_id,shift').eq('plan_date',todayStr()).eq('promoter_id',profile.id).limit(1);
   updateShiftUI();
+  if(plan&&plan.length){
+    $('tpSelect').value=plan[0].touch_point_id;
+    updateShiftUI();
+    if(plan[0].shift==='night')pickShift('night');
+    msg('signinMsg',`خطتك اليوم جاهزة من المشرف 🗺️ ${plan[0].shift==='day'?'☀️':'🌙'}`,'ok');
+  }
   show('signinCard');
 }
 function buildStatusGrid(){
@@ -750,15 +794,16 @@ async function loadStaffCounts(){
 }
 async function loadDashLists(city,start){
   const{data:att}=await db.from('attendance')
-    .select('shift,status,guided_trials,checked_in_at,work_date,users(full_name),touch_points!inner(name,city)')
+    .select('id,shift,status,guided_trials,checked_in_at,work_date,users(full_name),touch_points!inner(name,city)')
     .gte('work_date',start).eq('touch_points.city',city).order('checked_in_at');
   const gtTotal=(att||[]).reduce((a,x)=>a+(x.guided_trials||0),0);
   $('sGT').textContent=gtTotal;
   $('sAtt').textContent=(att||[]).length;
+  const canDelAtt=profile.role==='supervisor';
   $('attList').innerHTML=(att&&att.length)?att.map(a=>`
     <div class="sale-item"><div><b>${a.users.full_name}</b>
       <div class="meta">${a.status==='work'?((a.touch_points.name.split('_')[1]||a.touch_points.name)+' · '+(a.shift==='day'?'نهاري ☀️':'ليلي 🌙')):STATUSES[a.status]} · ${a.work_date}</div>
-    </div><span style="font-size:11px;color:var(--muted)">GT: ${a.guided_trials}</span></div>`).join('')
+    </div><span style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;color:var(--muted)">GT: ${a.guided_trials}</span>${canDelAtt?`<button class="del" onclick="supDelAtt(${a.id})">🗑️</button>`:''}</span></div>`).join('')
     :'<div class="spin">لا تسجيلات في الفترة</div>';
   const{data:sales}=await db.from('sell_operations')
     .select('sale_type,promoter_id,users(full_name),attendance!inner(touch_points!inner(name,city))')
@@ -789,7 +834,7 @@ async function loadDashLists(city,start){
   loadStockView(city,start);
   loadCheckView(city);
   loadSalesFeed(city,start);
-  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager()}
+  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager();$('routePlan').classList.remove('hidden');initRoutePlan()}
 }
 // team curve
 let teamChartObj=null;
@@ -926,13 +971,109 @@ async function toggleOutlet(id,active){
   loadTpManager();loadTargetsEditor();
 }
 let ntpDualVal=false;
-function ntpDual(v){ntpDualVal=v;$('ntpDual-no').classList.toggle('active',!v);$('ntpDual-yes').classList.toggle('active',v)}
+function ntpDual(v){ntpDualVal=v;$('ntpDual-no').classList.toggle('active',!v);$('ntpDual-yes').classList.toggle('active',v);$('ntpNightRow').classList.toggle('hidden',!v)}
+
+// ---- ROUTE PLAN ----
+let rpOutlets=[],rpPromoters=[],rpInited=false;
+function initRoutePlan(){
+  if(rpInited)return;rpInited=true;
+  const d=new Date();d.setDate(d.getDate()+1);
+  $('rpDate').value=d.toISOString().slice(0,10);
+  loadRoutePlan();
+}
+async function loadRoutePlan(){
+  const dt=$('rpDate').value;
+  const[{data:tps},{data:pros},{data:plan}]=await Promise.all([
+    db.from('touch_points').select('*').eq('active',true).eq('city',profile.city).order('name'),
+    db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).order('full_name'),
+    db.from('route_plans').select('*').eq('plan_date',dt)
+  ]);
+  rpOutlets=tps||[];rpPromoters=pros||[];
+  const assigned={};(plan||[]).forEach(p=>assigned[p.touch_point_id+'-'+p.shift]=p.promoter_id);
+  const opts=sel=>'<option value="">— بدون —</option>'+rpPromoters.map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${p.full_name.split(' ').slice(0,2).join(' ')}</option>`).join('');
+  const row=(tp,sh,lbl)=>`<div class="stock-row"><span style="font-size:12.5px">${(tp.name.split('_')[1]||tp.name)} — ${lbl}</span>
+    <select id="rp-${tp.id}-${sh}" style="width:160px;font-size:13px;padding:8px">${opts(assigned[tp.id+'-'+sh])}</select></div>`;
+  $('rpSlots').innerHTML=rpOutlets.map(tp=>{
+    let r=row(tp,'day','نهاري ☀️');
+    if(tp.dual_shift)r+=row(tp,'night','ليلي 🌙');
+    return r;
+  }).join('')||'<div class="spin">لا مواقع نشطة</div>';
+}
+async function saveRoutePlan(){
+  $('rpBtn').disabled=true;
+  const dt=$('rpDate').value;
+  const rows=[];const used={};let dup=null;
+  rpOutlets.forEach(tp=>{
+    ['day','night'].forEach(sh=>{
+      const el=$('rp-'+tp.id+'-'+sh);
+      if(el&&el.value){
+        const key=el.value+'-'+sh;
+        if(used[key])dup=rpPromoters.find(p=>p.id===el.value);
+        used[key]=true;
+        rows.push({plan_date:dt,touch_point_id:tp.id,shift:sh,promoter_id:el.value,created_by:profile.id});
+      }
+    });
+  });
+  if(dup){$('rpBtn').disabled=false;return msg('rpMsg',`${dup.full_name.split(' ')[0]} معيّن على موقعين بنفس الفترة!`,'err')}
+  // replace the day's plan for my city outlets
+  const myTpIds=rpOutlets.map(t=>t.id);
+  await db.from('route_plans').delete().eq('plan_date',dt).in('touch_point_id',myTpIds);
+  if(rows.length){
+    const{error}=await db.from('route_plans').insert(rows);
+    if(error){$('rpBtn').disabled=false;return msg('rpMsg','خطأ في الحفظ','err')}
+  }
+  $('rpBtn').disabled=false;
+  msg('rpMsg',`حُفظت خطة ${dt} (${rows.length} تعيين) ✅`,'ok');
+}
+function genRouteMsg(){
+  const dt=$('rpDate').value;
+  const[y,mo,dd]=dt.split('-');
+  const name2=id=>{const p=rpPromoters.find(x=>x.id===id);return p?p.full_name.split(' ').slice(0,2).join(' '):'؟'};
+  const blocks=[];const activeIds=new Set();
+  rpOutlets.forEach(tp=>{
+    const dEl=$('rp-'+tp.id+'-day'),nEl=$('rp-'+tp.id+'-night');
+    const dv=dEl&&dEl.value?dEl.value:null;
+    const nv=nEl&&nEl.value?nEl.value:null;
+    if(!dv&&!nv)return;
+    if(dv)activeIds.add(dv);
+    if(nv)activeIds.add(nv);
+    const b=[];
+    if(tp.unicode)b.push(tp.unicode);
+    b.push(tp.name);
+    b.push('');
+    if(tp.maps_url){b.push(tp.maps_url);b.push('')}
+    if(dv)b.push('Day : '+name2(dv));
+    if(nv)b.push('Night : '+name2(nv));
+    blocks.push(b.join('\n'));
+  });
+  if(!blocks.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
+  const absent=rpPromoters.filter(p=>!activeIds.has(p.id));
+  const lines=[profile.city,`${dd}/${mo}/${y}`,'',''];
+  lines.push(blocks.join('\n\n\n🟰🟰🟰🟰🟰🟰\n\n'));
+  lines.push('');
+  lines.push(`Total active : ${activeIds.size}`);
+  if(absent.length){
+    lines.push('');
+    lines.push('Absent:');
+    absent.forEach(p=>lines.push(`${p.full_name.split(' ').slice(0,2).join(' ')} ::: أوف`));
+  }
+  lines.push('');lines.push('');
+  lines.push('🟰🟰🟰🟰🟰🟰');
+  $('rpBox').value=lines.join('\n');
+  $('rpMsgWrap').classList.remove('hidden');
+}
+async function supDelAtt(id){
+  if(!confirm('حذف هذا التسجيل نهائياً؟ (يُرفض إذا كانت عليه مبيعات)'))return;
+  const{error}=await db.from('attendance').delete().eq('id',id);
+  if(error)return alert('لا يمكن الحذف — عليه مبيعات مسجلة. احذف مبيعاته من آخر العمليات أولاً.');
+  loadStaffCounts();
+}
 async function loadTpManager(){
   const{data}=await db.from('touch_points').select('*').eq('city',profile.city).order('active',{ascending:false}).order('name');
   $('tpList').innerHTML=(data||[]).map(tp=>`
     <div class="sale-item" style="${tp.active?'':'opacity:.45'}">
       <div><b>${tp.name.split('_')[1]||tp.name}</b>
-        <div class="meta">${tp.dual_shift?'دوامين ☀️🌙':'نهاري ☀️'}${tp.maps_url?' · 📍 ماب':''} · ${tp.active?'نشط':'موقوف'}</div>
+        <div class="meta">${tp.unicode?tp.unicode+' · ':''}${tp.dual_shift?'دوامين ☀️🌙':'نهاري ☀️'}${tp.maps_url?' · 📍 ماب':''} · ${tp.active?'نشط':'موقوف'}</div>
       </div>
       <button style="width:auto;margin:0;padding:6px 10px;font-size:11px;${tp.active?'background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none':''}" onclick="toggleTp(${tp.id},${!tp.active})">${tp.active?'إيقاف':'تفعيل ✓'}</button>
     </div>`).join('')||'<div class="spin">لا مواقع</div>';
@@ -940,16 +1081,28 @@ async function loadTpManager(){
 async function addTp(){
   const n=$('ntpName').value.trim();
   const m=$('ntpMaps').value.trim();
+  const code=$('ntpCode').value.trim();
   if(!n)return msg('tpMsg','اكتب اسم الموقع','err');
-  const{error}=await db.from('touch_points').insert({name:n,maps_url:m||null,dual_shift:ntpDualVal,city:profile.city});
+  const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,dual_shift:ntpDualVal,city:profile.city}).select().single();
   if(error){
     if(error.code==='23505')return msg('tpMsg','الاسم مستخدم مسبقاً — الأسماء فريدة','err');
     return msg('tpMsg','خطأ في الإضافة','err');
   }
-  $('ntpName').value='';$('ntpMaps').value='';ntpDual(false);
-  msg('tpMsg','أُضيف الموقع ✅ — لا تنسَ تحديد هدفه','ok');
+  // targets in same action (if provided)
+  const tgRows=[];
+  const td=parseFloat($('ntpTgDay').value),gd=parseFloat($('ntpGtDay').value);
+  if(!isNaN(td))tgRows.push({touch_point_id:newTp.id,shift:'day',daily_target:td,gt_target:isNaN(gd)?0:gd,month:curMonth()});
+  if(ntpDualVal){
+    const tn=parseFloat($('ntpTgNight').value),gn=parseFloat($('ntpGtNight').value);
+    if(!isNaN(tn))tgRows.push({touch_point_id:newTp.id,shift:'night',daily_target:tn,gt_target:isNaN(gn)?0:gn,month:curMonth()});
+  }
+  if(tgRows.length)await db.from('targets').insert(tgRows);
+  ['ntpName','ntpMaps','ntpCode','ntpTgDay','ntpGtDay','ntpTgNight','ntpGtNight'].forEach(i=>$(i).value='');
+  ntpDual(false);
+  msg('tpMsg',`أُضيف الموقع ✅${tgRows.length?' مع أهدافه 🎯':' — حدد هدفه لاحقاً'}`,'ok');
   loadTpManager();
   window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;
+  rpInited=false;
 }
 async function toggleTp(id,active){
   await db.from('touch_points').update({active}).eq('id',id);
@@ -994,8 +1147,8 @@ async function loadTargetsEditor(){
     </span></div>`;
   $('targetsList').innerHTML='<div class="stock-row" style="border:none"><span style="color:var(--muted);font-size:11px">الموقع</span><span style="display:flex;gap:6px;color:var(--muted);font-size:11px"><span style="width:72px;text-align:center">هدف مبيعات</span><span style="width:60px;text-align:center">هدف GT</span></span></div>'+
     tgOutlets.map(tp=>{
-      let rows=row(tp,'day','نهاري');
-      if(tp.dual_shift)rows+=row(tp,'night','ليلي');
+      let rows=row(tp,'day','Day');
+      if(tp.dual_shift)rows+=row(tp,'night','Night');
       return rows;
     }).join('');
 }

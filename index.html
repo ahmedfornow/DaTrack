@@ -156,9 +156,9 @@
         <div id="salesList"><div class="spin">لا مبيعات بعد</div></div>
       </div>
       <div class="card">
-        <h2>📈 منحنى الشهر — مبيعاتي مقابل الهدف</h2>
+        <h2>📈 منحنى الشهر — LAS مقابل الهدف</h2>
         <div class="counter">
-          <div><div class="num" id="mSales">0</div><div class="lbl">مبيعات الشهر</div></div>
+          <div><div class="num" id="mSales">0</div><div class="lbl">LAS الشهر</div></div>
           <div><div class="num" id="mTarget">0</div><div class="lbl">الهدف حتى اليوم</div></div>
           <div><div class="num" id="mPct">—</div><div class="lbl">نسبة التحقيق</div></div>
         </div>
@@ -216,43 +216,83 @@
   </div>
 
   <!-- STAFF DASHBOARD -->
-  <div class="card hidden" id="staffCard">
-    <div class="welcome" id="staffRole">—</div>
-    <div class="pname" id="staffName">—</div>
+  <div class="hidden" id="staffCard">
+    <div class="topbar">
+      <div><div class="welcome" id="staffRole">—</div><div class="pname" id="staffName" style="margin-bottom:0">—</div></div>
+      <button class="exit" onclick="doLogout()">خروج</button>
+    </div>
     <div id="cityWrap" class="hidden">
       <label>المنطقة / المدينة</label>
       <select id="citySelect" onchange="loadStaffCounts()"></select>
       <div style="height:12px"></div>
     </div>
-    <div class="tabs" style="margin-bottom:12px">
+    <div class="tabs">
+      <div class="tab active" id="dOver" onclick="showDash('over')">📊 نظرة</div>
+      <div class="tab" id="dTeam" onclick="showDash('team')">👥 الفريق</div>
+      <div class="tab" id="dPlan" onclick="showDash('plan')">🗺️ الخطة</div>
+      <div class="tab" id="dAdmin" onclick="showDash('admin')">⚙️ إدارة</div>
+    </div>
+    <div id="periodRow" class="tabs" style="margin-bottom:14px">
       <div class="tab active" id="pToday" onclick="setPeriod('today')">اليوم</div>
       <div class="tab" id="pWeek" onclick="setPeriod('week')">آخر 7 أيام</div>
       <div class="tab" id="pMonth" onclick="setPeriod('month')">الشهر</div>
     </div>
+
+    <div id="paneOver">
     <div class="counter">
       <div><div class="num" id="sToday">—</div><div class="lbl">مبيعات</div></div>
       <div><div class="num" id="sGT">—</div><div class="lbl">Guided Trials</div></div>
       <div><div class="num" id="sAtt">—</div><div class="lbl">تسجيلات</div></div>
     </div>
-    <h2 class="sec-h">📈 منحنى الشهر — الفريق مقابل الهدف</h2>
+      <div class="card">
+    <h2>📈 منحنى الشهر — الفريق (LAS) مقابل الهدف</h2>
     <div class="chart-card"><canvas id="teamChart" height="190"></canvas></div>
-    <button onclick="exportCSV()" style="margin-top:12px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">⬇️ تصدير سجل الشهر (CSV)</button>
-    <div style="margin-top:10px">
-      <h2 class="sec-h">📆 التسجيل + تحقيق الهدف (LAS)</h2>
-      <div id="fillWidget"><div class="spin">جاري التحميل...</div></div>
-      <h2 class="sec-h">📋 الحضور</h2>
-      <div id="attList"><div class="spin">جاري التحميل...</div></div>
-      <h2 class="sec-h">🛒 مبيعات المندوبين</h2>
-      <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
-      <h2 class="sec-h">📍 مبيعات المواقع</h2>
-      <div id="outletSales"><div class="spin">جاري التحميل...</div></div>
+      </div>
+      <div class="card">
+        <h2>📤 تقارير ومشاركة</h2>
       <button onclick="genSummary()" style="margin-top:14px">📋 توليد ملخص الفترة</button>
       <div id="sumWrap" class="hidden">
         <textarea id="sumBox" style="min-height:220px;margin-top:10px;font-size:13px;direction:ltr;font-family:monospace"></textarea>
         <button onclick="copyText('sumBox',this)">نسخ الملخص 📋</button>
       </div>
-      <div id="routePlan" class="hidden">
-        <h2 class="sec-h">🗺️ خطة اليوم (Route Plan)</h2>
+    <button onclick="exportCSV()" style="margin-top:12px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">⬇️ تصدير سجل الشهر (CSV)</button>
+      </div>
+    </div>
+
+    <div id="paneTeam" class="hidden">
+      <div class="card">
+      <h2>📆 التسجيل + تحقيق الهدف (LAS)</h2>
+      <div id="fillWidget"><div class="spin">جاري التحميل...</div></div>
+      </div>
+      <div class="card">
+      <h2>📋 الحضور</h2>
+      <div id="attList"><div class="spin">جاري التحميل...</div></div>
+      </div>
+      <div class="card">
+      <h2>🛒 مبيعات المندوبين</h2>
+      <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
+      </div>
+      <div class="card">
+      <h2>📍 مبيعات المواقع</h2>
+      <div id="outletSales"><div class="spin">جاري التحميل...</div></div>
+      </div>
+      <div class="card">
+      <h2>📦 جرد المواقع (الفترة)</h2>
+      <div id="stockView"><div class="spin">جاري التحميل...</div></div>
+      </div>
+      <div class="card">
+      <h2>✅ التشيك ليست اليوم</h2>
+      <div id="checkView"><div class="spin">جاري التحميل...</div></div>
+      </div>
+      <div class="card">
+      <h2>🕐 آخر العمليات</h2>
+      <div id="salesFeed"><div class="spin">جاري التحميل...</div></div>
+      </div>
+    </div>
+
+    <div id="panePlan" class="hidden">
+      <div id="routePlan" class="card hidden">
+        <h2>🗺️ خطة اليوم (Route Plan)</h2>
         <label>تاريخ الخطة</label>
         <input type="date" id="rpDate" style="text-align:center" onchange="loadRoutePlan()">
         <div id="rpSlots" style="margin-top:6px"><div class="spin">جاري التحميل...</div></div>
@@ -264,20 +304,17 @@
         </div>
         <div class="msg" id="rpMsg"></div>
       </div>
-      <div id="targetsSection" class="hidden">
-        <h2 class="sec-h">🎯 أهداف شهر <span id="tgMonth"></span></h2>
+    </div>
+
+    <div id="paneAdmin" class="hidden">
+      <div id="targetsSection" class="card hidden">
+        <h2>🎯 أهداف شهر <span id="tgMonth"></span></h2>
         <div id="targetsList"><div class="spin">جاري التحميل...</div></div>
         <button onclick="saveTargets()" id="tgBtn">حفظ الأهداف 🎯</button>
         <div class="msg" id="tgMsg"></div>
       </div>
-      <h2 class="sec-h">📦 جرد المواقع (الفترة)</h2>
-      <div id="stockView"><div class="spin">جاري التحميل...</div></div>
-      <h2 class="sec-h">✅ التشيك ليست اليوم</h2>
-      <div id="checkView"><div class="spin">جاري التحميل...</div></div>
-      <h2 class="sec-h">🕐 آخر العمليات</h2>
-      <div id="salesFeed"><div class="spin">جاري التحميل...</div></div>
-      <div id="tpManage" class="hidden">
-        <h2 class="sec-h">🏪 إدارة المواقع</h2>
+      <div id="tpManage" class="card hidden">
+        <h2>🏪 إدارة المواقع</h2>
         <div id="tpList"></div>
         <label>إضافة موقع جديد</label>
         <input type="text" id="ntpName" style="text-align:right;letter-spacing:0" placeholder="اسم الموقع (فريد)">
@@ -305,8 +342,8 @@
         <button onclick="addTp()">إضافة الموقع ➕</button>
         <div class="msg" id="tpMsg"></div>
       </div>
-      <div id="clManage" class="hidden">
-        <h2 class="sec-h">🛠️ إدارة بنود التشيك ليست</h2>
+      <div id="clManage" class="card hidden">
+        <h2>🛠️ إدارة بنود التشيك ليست</h2>
         <div id="clItems"></div>
         <label>إضافة بند جديد</label>
         <input type="text" id="newClItem" style="text-align:right;letter-spacing:0" placeholder="اكتب البند...">
@@ -314,7 +351,6 @@
         <div class="msg" id="clMsg"></div>
       </div>
     </div>
-    <button class="logout" onclick="doLogout()">تسجيل خروج</button>
   </div>
 </div>
 
@@ -524,7 +560,7 @@ let promoChartObj=null;
 async function loadMyAnalytics(){
   const m=curMonth();
   const[{data:sales},{data:att},{data:tgs}]=await Promise.all([
-    db.from('sell_operations').select('work_date').eq('promoter_id',profile.id).gte('work_date',m+'-01'),
+    db.from('sell_operations').select('work_date').eq('promoter_id',profile.id).eq('customer_type','LAS').gte('work_date',m+'-01'),
     db.from('attendance').select('work_date,shift,status,touch_point_id').eq('promoter_id',profile.id).gte('work_date',m+'-01'),
     db.from('targets').select('touch_point_id,shift,daily_target').eq('month',m)
   ]);
@@ -549,7 +585,7 @@ function drawCurve(canvasId,labels,actual,target){
   return new Chart($(canvasId),{
     type:'line',
     data:{labels,datasets:[
-      {label:'المبيعات',data:actual,borderColor:'#d8bd84',backgroundColor:'rgba(216,189,132,.12)',fill:true,tension:.3,pointRadius:0,borderWidth:2},
+      {label:'LAS المحقق',data:actual,borderColor:'#d8bd84',backgroundColor:'rgba(216,189,132,.12)',fill:true,tension:.3,pointRadius:0,borderWidth:2},
       {label:'الهدف',data:target,borderColor:'#8a93a3',borderDash:[6,5],fill:false,tension:.2,pointRadius:0,borderWidth:1.6}
     ]},
     options:{
@@ -745,6 +781,13 @@ async function switchSession(attId){
 }
 
 // ============ STAFF FLOW ============
+function showDash(t){
+  ['Over','Team','Plan','Admin'].forEach(x=>{
+    $('d'+x).classList.toggle('active',x.toLowerCase()===t);
+    $('pane'+x).classList.toggle('hidden',x.toLowerCase()!==t);
+  });
+  $('periodRow').classList.toggle('hidden',!(t==='over'||t==='team'));
+}
 let staffPeriod='today';
 function setPeriod(p){
   staffPeriod=p;
@@ -766,7 +809,9 @@ async function staffFlow(){
     $('citySelect').innerHTML=cities.map(c=>`<option value="${c}" ${c===profile.city?'selected':''}>${c}</option>`).join('');
     $('cityWrap').classList.remove('hidden');
   }
+  if(profile.role==='manager'){$('dPlan').style.display='none';$('dAdmin').style.display='none'}
   show('staffCard');
+  showDash('over');
   loadStaffCounts();
 }
 async function loadStaffCounts(){
@@ -807,23 +852,33 @@ async function loadFillWidget(city){
     const col=full?'var(--green)':r.c>=elapsed*0.7?'var(--gold)':'var(--red)';
     const ach=r.tg>0?Math.round(r.sales/r.tg*100):null;
     const acol=ach==null?'var(--muted)':ach>=100?'var(--green)':ach>=70?'var(--gold)':'var(--red)';
-    return `<div class="item" style="display:block">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <b>${full?'✅':'⚠️'} ${r.n}</b>
-        <span style="display:flex;gap:10px;align-items:center">
-          <span style="font-weight:700;color:${col}">${r.c}/${elapsed}<span style="font-size:9px;color:var(--muted)"> يوم</span></span>
-          <span style="font-weight:700;color:${acol}">${r.sales}/${r.tg}${ach!=null?` · ${ach}%`:''}<span style="font-size:9px;color:var(--muted)"> LAS</span></span>
-        </span>
+    const apct=Math.min(100,ach||0);
+    const cell=(lbl,val,c,p)=>`<div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;margin-bottom:4px">
+        <span style="font-size:10px;color:var(--muted)">${lbl}</span>
+        <span dir="ltr" style="font-size:13px;font-weight:700;color:${c}">${val}</span>
       </div>
-      <div class="bar"><div style="width:${pct}%;background:${col}"></div></div>
+      <div class="bar" style="margin-top:0"><div style="width:${p}%;background:${c}"></div></div>
+    </div>`;
+    return `<div class="item" style="display:block;padding:12px 13px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <span style="font-size:13px">${full?'✅':'⚠️'}</span>
+        <b style="font-size:13.5px;line-height:1.3">${r.n}</b>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${cell('أيام مسجلة',`${r.c}/${elapsed}`,col,pct)}
+        ${cell('هدف LAS',`${r.sales}/${r.tg}${ach!=null?` · ${ach}%`:''}`,acol,apct)}
+      </div>
     </div>`;
   }).join(''):'<div class="spin">لا مندوبين</div>';
 }
 async function loadDashLists(city,start){
   loadFillWidget(city);
-  const{data:att}=await db.from('attendance')
-    .select('id,shift,status,guided_trials,checked_in_at,work_date,users(full_name),touch_points!inner(name,city)')
-    .gte('work_date',start).eq('touch_points.city',city).order('checked_in_at');
+  const{data:attRaw}=await db.from('attendance')
+    .select('id,shift,status,guided_trials,checked_in_at,work_date,users(full_name,city),touch_points(name,city)')
+    .gte('work_date',start).order('checked_in_at');
+  // left join + client filter: off/sick/leave days have no outlet, so scope them by the promoter's city
+  const att=(attRaw||[]).filter(a=>a.touch_points?a.touch_points.city===city:(a.users?a.users.city===city:false));
   const gtTotal=(att||[]).reduce((a,x)=>a+(x.guided_trials||0),0);
   $('sGT').textContent=gtTotal;
   $('sAtt').textContent=(att||[]).length;
@@ -869,7 +924,7 @@ let teamChartObj=null;
 async function loadTeamAnalytics(city){
   const m=curMonth();
   const[{data:sales},{data:att},{data:tgs}]=await Promise.all([
-    db.from('sell_operations').select('work_date,attendance!inner(touch_points!inner(city))').gte('work_date',m+'-01').eq('attendance.touch_points.city',city),
+    db.from('sell_operations').select('work_date,attendance!inner(touch_points!inner(city))').eq('customer_type','LAS').gte('work_date',m+'-01').eq('attendance.touch_points.city',city),
     db.from('attendance').select('work_date,shift,status,touch_point_id,touch_points!inner(city)').gte('work_date',m+'-01').eq('touch_points.city',city),
     db.from('targets').select('touch_point_id,shift,daily_target').eq('month',m)
   ]);

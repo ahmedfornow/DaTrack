@@ -133,7 +133,7 @@
     <!-- SALES -->
     <div id="paneSales">
       <div class="counter">
-        <div><div class="num" id="cToday">0</div><div class="lbl">مبيعات الجلسة</div></div>
+        <div><div class="num" id="cToday">0</div><div class="lbl">LAS الجلسة</div></div>
         <div><div class="num" id="cTarget">—</div><div class="lbl">هدف اليوم</div></div>
         <div><div class="num" id="cSK">0</div><div class="lbl">SK</div></div>
         <div><div class="num" id="cMGM">0</div><div class="lbl">MGM</div></div>
@@ -240,9 +240,12 @@
 
     <div id="paneOver">
     <div class="counter">
-      <div><div class="num" id="sToday">—</div><div class="lbl">مبيعات</div></div>
+      <div><div class="num" id="sLas">—</div><div class="lbl">مبيعات LAS</div></div>
       <div><div class="num" id="sGT">—</div><div class="lbl">Guided Trials</div></div>
       <div><div class="num" id="sAtt">—</div><div class="lbl">تسجيلات</div></div>
+    </div>
+    <div class="counter" style="margin-top:-4px">
+      <div><div class="num" id="sTotal" style="color:var(--muted);font-size:18px">—</div><div class="lbl">إجمالي النشاط (LAU مشمول)</div></div>
     </div>
       <div class="card">
     <h2>📈 منحنى الشهر — الفريق (LAS) مقابل الهدف</h2>
@@ -538,7 +541,10 @@ async function submitSale(){
 async function loadTodaySales(){
   const{data}=await db.from('sell_operations').select('*').eq('attendance_id',session.id).order('created_at',{ascending:false});
   const sales=data||[];
-  $('cToday').textContent=sales.length;
+  const lasN=sales.filter(s=>s.customer_type==='LAS').length;
+  const lauN=sales.length-lasN;
+  $('cToday').textContent=lasN;
+  $('cToday').title='LAS: '+lasN+(lauN?' · LAU: '+lauN+' (لا يحتسب بالهدف)':'');
   $('cSK').textContent=sales.filter(s=>s.sale_type==='SK'||s.sale_type==='SK+MGM').length;
   $('cMGM').textContent=sales.filter(s=>s.sale_type==='MGM'||s.sale_type==='SK+MGM').length;
   $('salesList').innerHTML=sales.length?sales.map(s=>`
@@ -843,11 +849,14 @@ async function staffFlow(){
 async function loadStaffCounts(){
   const start=periodStart();
   const city=profile.role==='manager'?$('citySelect').value:profile.city;
-  const[{count:sc}]=await Promise.all([
+  const[{count:scLas},{count:scAll}]=await Promise.all([
+    db.from('sell_operations').select('*, attendance!inner(touch_points!inner(city))',{count:'exact',head:true})
+      .eq('customer_type','LAS').gte('work_date',start).eq('attendance.touch_points.city',city),
     db.from('sell_operations').select('*, attendance!inner(touch_points!inner(city))',{count:'exact',head:true})
       .gte('work_date',start).eq('attendance.touch_points.city',city)
   ]);
-  $('sToday').textContent=sc??0;
+  $('sLas').textContent=scLas??0;
+  $('sTotal').textContent=scAll??0;
   loadDashLists(city,start);
   loadTeamAnalytics(city);
   if(profile.role==='supervisor'&&!window.tgLoaded){window.tgLoaded=true;loadTargetsEditor()}
@@ -920,26 +929,30 @@ async function loadDashLists(city,start){
   const by={},byOut={};
   (sales||[]).forEach(s=>{
     const n=s.users.full_name;
-    by[n]=by[n]||{t:0,sk:0,mgm:0,ld:0};
-    by[n].t++;
+    by[n]=by[n]||{las:0,lau:0,sk:0,mgm:0,ld:0};
+    const isLas=s.customer_type==='LAS';
+    if(isLas)by[n].las++;else by[n].lau++;
     if(s.sale_type==='SK'||s.sale_type==='SK+MGM')by[n].sk++;
     if(s.sale_type==='MGM'||s.sale_type==='SK+MGM')by[n].mgm++;
     if(s.sale_type==='LD')by[n].ld++;
     const o=s.attendance.touch_points.name;
-    byOut[o]=(byOut[o]||0)+1;
+    byOut[o]=byOut[o]||{las:0,lau:0};
+    if(isLas)byOut[o].las++;else byOut[o].lau++;
   });
-  const names=Object.keys(by).sort((a,b)=>by[b].t-by[a].t);
+  const names=Object.keys(by).sort((a,b)=>by[b].las-by[a].las);
   $('promoSales').innerHTML=names.length?names.map(n=>`
     <div class="sale-item"><div><b>${n}</b>
-      <div class="meta">SK: ${by[n].sk} · MGM: ${by[n].mgm} · LD: ${by[n].ld}</div>
-    </div><span style="font-size:18px;font-weight:800;color:var(--gold)">${by[n].t}</span></div>`).join('')
+      <div class="meta">SK: ${by[n].sk} · MGM: ${by[n].mgm} · LD: ${by[n].ld}${by[n].lau?' · LAU: '+by[n].lau:''}</div>
+    </div><span style="font-size:18px;font-weight:800;color:var(--gold)">${by[n].las}<span style="font-size:10px;color:var(--muted)"> LAS</span></span></div>`).join('')
     :'<div class="spin">لا مبيعات في الفترة</div>';
-  const outs=Object.keys(byOut).sort((a,b)=>byOut[b]-byOut[a]);
+  const outs=Object.keys(byOut).sort((a,b)=>byOut[b].las-byOut[a].las);
   $('outletSales').innerHTML=outs.length?outs.map(o=>`
-    <div class="sale-item"><div><b>${o.split('_')[1]||o}</b></div>
-    <span style="font-size:18px;font-weight:800;color:var(--gold)">${byOut[o]}</span></div>`).join('')
+    <div class="sale-item"><div><b>${o.split('_')[1]||o}</b>${byOut[o].lau?`<div class="meta">LAU: ${byOut[o].lau}</div>`:''}</div>
+    <span style="font-size:18px;font-weight:800;color:var(--gold)">${byOut[o].las}<span style="font-size:10px;color:var(--muted)"> LAS</span></span></div>`).join('')
     :'<div class="spin">لا مبيعات في الفترة</div>';
-  window.dashData={by,byOut,total:(sales||[]).length,gt:gtTotal,att:(att||[]).length,city,start};
+  const totalLas=names.reduce((a,n)=>a+by[n].las,0);
+  const totalLau=(sales||[]).length-totalLas;
+  window.dashData={by,byOut,las:totalLas,lau:totalLau,total:(sales||[]).length,gt:gtTotal,att:(att||[]).length,city,start};
   loadStockView(city,start);
   loadCheckView(city);
   loadSalesFeed(city,start);
@@ -990,14 +1003,15 @@ function genSummary(){
   const lbl=staffPeriod==='today'?'Daily':staffPeriod==='week'?'Weekly':'Monthly';
   const lines=[`DaTracker — ${d.city} · ${lbl} Summary`,`${d.start} → ${todayStr()}`,''];
   let sk=0,mgm=0,ld=0;Object.values(d.by).forEach(v=>{sk+=v.sk;mgm+=v.mgm;ld+=v.ld});
-  lines.push(`Total sales : ${d.total}`);
+  lines.push(`LAS sales : ${d.las}`);
+  lines.push(`Total activity : ${d.total} (LAU included: ${d.lau})`);
   lines.push(`SK: ${sk} | MGM: ${mgm} | LD: ${ld}`);
   lines.push(`Guided trials : ${d.gt}`);
   lines.push(`Check-ins : ${d.att}`);
-  lines.push('');lines.push('By promoter:');
-  Object.keys(d.by).sort((a,b)=>d.by[b].t-d.by[a].t).forEach((n,i)=>lines.push(`${i+1}. ${n} — ${d.by[n].t}`));
-  lines.push('');lines.push('By outlet:');
-  Object.keys(d.byOut).sort((a,b)=>d.byOut[b]-d.byOut[a]).forEach((o,i)=>lines.push(`${i+1}. ${o.split('_')[1]||o} — ${d.byOut[o]}`));
+  lines.push('');lines.push('By promoter (LAS):');
+  Object.keys(d.by).sort((a,b)=>d.by[b].las-d.by[a].las).forEach((n,i)=>lines.push(`${i+1}. ${n} — ${d.by[n].las}`));
+  lines.push('');lines.push('By outlet (LAS):');
+  Object.keys(d.byOut).sort((a,b)=>d.byOut[b].las-d.byOut[a].las).forEach((o,i)=>lines.push(`${i+1}. ${o.split('_')[1]||o} — ${d.byOut[o].las}`));
   $('sumBox').value=lines.join('\n');
   $('sumWrap').classList.remove('hidden');
 }

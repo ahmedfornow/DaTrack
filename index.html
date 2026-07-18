@@ -602,9 +602,35 @@ function drawCurve(canvasId,labels,actual,target){
 // ---- END-OF-SHIFT REPORT ----
 async function genReport(){
   const gt=parseInt($('gtInput').value)||0;
-  await db.from('attendance').update({guided_trials:gt}).eq('id',session.id);
   const{data}=await db.from('sell_operations').select('*').eq('attendance_id',session.id).order('created_at');
   const sales=data||[];
+  const outlet=session.touch_points?(session.touch_points.name.split('_')[1]||session.touch_points.name):'موقعك';
+  const shiftAr=session.shift==='day'?'نهاري ☀️':'ليلي 🌙';
+  // LAS vs target achievement (only LAS counts)
+  const lasCount=sales.filter(s=>s.customer_type==='LAS').length;
+  let tgt=null;
+  const{data:tg}=await db.from('targets').select('daily_target').eq('touch_point_id',session.touch_point_id).eq('shift',session.shift).eq('month',session.work_date.slice(0,7)).maybeSingle();
+  if(tg)tgt=Number(tg.daily_target);
+  // ---- VERIFICATION DIALOG ----
+  let confirmMsg='📍 أنت في: '+outlet+' — '+shiftAr+'\n\n';
+  confirmMsg+='🛒 إجمالي المبيعات: '+sales.length+'\n';
+  confirmMsg+='   (منها '+lasCount+' LAS)\n';
+  confirmMsg+='🎯 Guided Trials: '+gt+'\n\n';
+  if(sales.length===0){
+    confirmMsg+='⚠️ لم تسجّل أي مبيعة اليوم!\nإذا عندك مبيعات، ارجع وسجّلها قبل الإرسال.\n\n';
+  }
+  if(tgt&&tgt>0){
+    const pct=Math.round(lasCount/tgt*100);
+    confirmMsg+='📊 تحقيق الهدف: '+lasCount+'/'+tgt+' ('+pct+'%)\n';
+    if(pct<70)confirmMsg+='🔴 تحقيقك أقل من الهدف — متأكد إنك سجّلت كل مبيعاتك؟\n';
+    else if(pct<100)confirmMsg+='🟡 قريب من الهدف.\n';
+    else confirmMsg+='🟢 ممتاز! حققت هدفك.\n';
+    confirmMsg+='\n';
+  }
+  confirmMsg+='هل الأرقام صحيحة وتريد إنشاء التقرير؟';
+  if(!confirm(confirmMsg))return;
+  // confirmed → now save GT + build report
+  await db.from('attendance').update({guided_trials:gt}).eq('id',session.id);
   const[y,mo,dd]=session.work_date.split('-');
   const lines=[];
   lines.push(session.touch_points?session.touch_points.name:'');

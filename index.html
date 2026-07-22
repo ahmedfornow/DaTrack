@@ -1,1321 +1,961 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>DaTracker | Your Report Assistant</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IQOS · Sales Report</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;700&display=swap');
-  :root {
-    --bg:#07090d; --card:#10141b; --card2:#161b24;
-    --gold:#d8bd84; --gold-hi:#e8d7ab; --gold-lo:#b3915c;
-    --line:rgba(216,189,132,.16); --line-soft:rgba(216,189,132,.08);
-    --text:#eceae4; --muted:#8a93a3;
-    --green:#3ddc97; --red:#e5604f; --radius:16px;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;-webkit-tap-highlight-color:transparent}
-  body{background:radial-gradient(1200px 600px at 50% -10%, #0d1219 0%, var(--bg) 55%);color:var(--text);min-height:100vh;padding:18px 16px;display:flex;justify-content:center}
-  .container{width:100%;max-width:440px}
-  .logo{text-align:center;margin:14px 0 26px}
-  .logo h1{font-size:27px;letter-spacing:.5px;font-weight:300;color:var(--text)}
-  .logo h1 b{font-weight:700;background:linear-gradient(120deg,var(--gold-hi),var(--gold-lo));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .logo p{color:var(--muted);font-size:11.5px;margin-top:5px;letter-spacing:2.5px;text-transform:uppercase}
-  .logo::after{content:'';display:block;width:56px;height:1px;margin:14px auto 0;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
-  .card{background:linear-gradient(180deg,#131924 0%,var(--card) 100%);border-radius:var(--radius);padding:22px;border:1px solid var(--line);margin-bottom:14px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
-  .card h2{font-size:16px;margin-bottom:16px;font-weight:500;letter-spacing:.3px}
-  label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 6px;letter-spacing:.3px}
-  input,select,textarea{width:100%;padding:12px 14px;border-radius:11px;border:1px solid var(--line-soft);background:var(--card2);color:var(--text);font-size:16px;text-align:center;letter-spacing:2px;transition:border-color .15s}
-  select,textarea{text-align:right;letter-spacing:0}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
-  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-  button{width:100%;padding:13px;margin-top:16px;border:none;border-radius:11px;background:linear-gradient(135deg,var(--gold-hi) 0%,var(--gold) 45%,var(--gold-lo) 100%);color:#12100a;font-size:15px;font-weight:700;letter-spacing:.4px;cursor:pointer;box-shadow:0 6px 18px rgba(216,189,132,.18);transition:transform .12s,box-shadow .12s}
-  button:active{transform:translateY(1px);box-shadow:0 3px 10px rgba(216,189,132,.12)}
-  button:disabled{opacity:.45;cursor:wait}
-  .msg{margin-top:12px;padding:11px;border-radius:11px;font-size:13px;text-align:center;display:none}
-  .msg.err{display:block;background:rgba(229,96,79,.1);color:var(--red);border:1px solid rgba(229,96,79,.28)}
-  .msg.ok{display:block;background:rgba(61,220,151,.08);color:var(--green);border:1px solid rgba(61,220,151,.25)}
-  .hidden{display:none!important}
-  .welcome{font-size:13.5px;color:var(--muted)}
-  .pname{font-size:19px;font-weight:700;color:var(--gold);margin-bottom:14px}
-  .shift-row{display:flex;gap:10px;margin-top:6px}
-  .opt-btn{flex:1;padding:12px 6px;border-radius:11px;border:1px solid var(--line-soft);background:var(--card2);color:var(--text);font-size:13.5px;cursor:pointer;text-align:center;transition:all .13s}
-  .opt-btn.active{border-color:var(--gold);background:rgba(216,189,132,.1);color:var(--gold);font-weight:700;box-shadow:inset 0 0 0 1px rgba(216,189,132,.25)}
-  .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
-  .opt-grid.g3{grid-template-columns:1fr 1fr 1fr}
-  .logout{background:transparent;border:1px solid var(--line-soft);color:var(--muted);margin-top:10px;font-weight:400;font-size:13px;box-shadow:none}
-  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-  .topbar .info{font-size:12px;color:var(--muted);line-height:1.6}
-  .topbar .info b{color:var(--gold);font-size:13.5px}
-  .exit{background:transparent;border:1px solid var(--line-soft);color:var(--muted);width:auto;padding:8px 14px;margin:0;font-size:12px;font-weight:400;box-shadow:none}
-  .tabs{display:flex;gap:6px;margin-bottom:14px}
-  .tab{flex:1;padding:11px 4px;text-align:center;border-radius:11px;background:var(--card);border:1px solid var(--line-soft);color:var(--muted);font-size:12.5px;cursor:pointer;transition:all .13s}
-  .tab.active{background:rgba(216,189,132,.1);border-color:var(--gold);color:var(--gold);font-weight:700}
-  .counter{display:flex;justify-content:space-around;background:linear-gradient(180deg,#171d28,#131822);border:1px solid var(--line-soft);border-radius:13px;padding:14px 8px;margin-bottom:14px}
-  .counter div{text-align:center;flex:1}
-  .counter div+div{border-right:1px solid var(--line-soft)}
-  .counter .num{font-size:22px;font-weight:700;color:var(--gold)}
-  .counter .lbl{font-size:10.5px;color:var(--muted);margin-top:2px;letter-spacing:.3px}
-  .sale-item{display:flex;justify-content:space-between;align-items:center;background:var(--card2);border:1px solid var(--line-soft);border-radius:11px;padding:11px 13px;margin-top:8px;font-size:13px}
-  .sale-item .del{background:transparent;border:none;color:var(--red);font-size:16px;width:auto;margin:0;padding:4px 8px;cursor:pointer;box-shadow:none}
-  .sale-item .meta{color:var(--muted);font-size:11px;margin-top:3px}
-  .stock-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line-soft)}
-  .stock-row span{font-size:13px}
-  .stock-row input{width:80px;padding:8px;font-size:15px}
-  .cat-title{color:var(--gold);font-size:12.5px;font-weight:700;margin:14px 0 4px;letter-spacing:.8px}
-  .chk-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-soft);cursor:pointer}
-  .chk-box{width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--green);flex-shrink:0;transition:all .13s}
-  .chk-row.done .chk-box{border-color:var(--green);background:rgba(61,220,151,.1)}
-  .chk-row span{font-size:14px}
-  .spin{text-align:center;color:var(--muted);padding:18px;font-size:13px}
-  .sec-h{font-size:14px;margin:20px 0 8px;color:var(--gold);letter-spacing:.4px;font-weight:500;display:flex;align-items:center;gap:8px}
-  .sec-h::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
-  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
-  .banner{padding:11px 14px;border-radius:11px;font-size:13px;text-align:center;margin-bottom:12px;border:1px solid}
-  .banner.info{background:rgba(216,189,132,.08);color:var(--gold);border-color:var(--line)}
-  .banner.calm{background:rgba(61,220,151,.07);color:var(--green);border-color:rgba(61,220,151,.22)}
-  .chart-card{background:var(--card2);border:1px solid var(--line-soft);border-radius:13px;padding:14px;margin-top:10px}
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* IQOS Brand Colors */
+  --iqos-dark:   #1a1a2e;
+  --iqos-mid:    #16213e;
+  --iqos-blue:   #0f3460;
+  --iqos-teal:   #00b4d8;
+  --iqos-teal2:  #0096c7;
+  --iqos-gold:   #c9a84c;
+  --iqos-gold2:  #e6c97a;
+  --iqos-light:  #e8f4f8;
+  --iqos-white:  #ffffff;
+  --iqos-grey:   #8d99ae;
+  --iqos-border: rgba(255,255,255,0.08);
+  --danger:      #e63946;
+  --success:     #2dc653;
+  --r:           14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--iqos-dark);
+  color: var(--iqos-white);
+  font-family: 'Montserrat', sans-serif;
+  min-height: 100vh;
+  padding: 0 0 80px;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+/* ── HEADER ── */
+.top-bar {
+  background: linear-gradient(135deg, var(--iqos-mid) 0%, var(--iqos-blue) 100%);
+  padding: 32px 20px 28px;
+  text-align: center;
+  position: relative;
+  border-bottom: 1px solid var(--iqos-border);
+}
+
+.top-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 60px; height: 2px;
+  background: linear-gradient(90deg, var(--iqos-teal), var(--iqos-gold));
+  border-radius: 2px;
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.brand-icon {
+  width: 40px; height: 40px;
+  background: linear-gradient(135deg, var(--iqos-teal), var(--iqos-teal2));
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--iqos-dark);
+  letter-spacing: 0.5px;
+}
+
+.brand-name {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+
+.top-sub {
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--iqos-grey);
+}
+
+/* ── CARDS ── */
+.card {
+  background: var(--iqos-mid);
+  border: 1px solid var(--iqos-border);
+  border-radius: var(--r);
+  margin: 16px 14px 0;
+  padding: 18px 16px;
+}
+
+.card-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--iqos-gold);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  background: var(--iqos-teal);
+  color: var(--iqos-dark);
+  font-size: 0.68rem;
+  font-weight: 700;
+  min-width: 20px; height: 20px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+.f { margin-bottom: 14px; }
+
+.lbl {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--iqos-grey);
+  margin-bottom: 7px;
+}
+
+.g2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+select, input[type="text"], input[type="number"] {
+  width: 100%;
+  background: var(--iqos-dark);
+  border: 1px solid var(--iqos-border);
+  border-radius: 10px;
+  color: var(--iqos-white);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.85rem;
+  padding: 11px 12px;
+  outline: none;
+  transition: border-color 0.18s, box-shadow 0.18s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+select {
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238d99ae' stroke-width='2'%3e%3cpath d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 34px;
+}
+
+select:focus, input:focus {
+  border-color: var(--iqos-teal);
+  box-shadow: 0 0 0 3px rgba(0,180,216,0.12);
+}
+
+/* ── SEGMENTED TOGGLES ── */
+.seg {
+  display: flex;
+  background: var(--iqos-dark);
+  border: 1px solid var(--iqos-border);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.seg-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 9px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--iqos-grey);
+  transition: all 0.18s;
+  user-select: none;
+}
+
+.seg-btn:hover { color: var(--iqos-light); }
+
+.seg-btn.active {
+  background: linear-gradient(135deg, var(--iqos-teal), var(--iqos-teal2));
+  color: var(--iqos-dark);
+}
+
+/* ── DEVICE CARDS ── */
+.device-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.dev-card {
+  position: relative;
+  background: var(--iqos-dark);
+  border: 1px solid var(--iqos-border);
+  border-radius: 12px;
+  padding: 14px 6px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.18s;
+  overflow: hidden;
+  user-select: none;
+}
+
+.dev-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+
+.dev-card[data-tier="prime"]::before { background: linear-gradient(90deg, var(--iqos-gold), var(--iqos-gold2)); }
+.dev-card[data-tier="i"]::before,
+.dev-card[data-tier="one"]::before   { background: linear-gradient(90deg, var(--iqos-teal), var(--iqos-teal2)); }
+
+.dev-card:hover { border-color: rgba(255,255,255,0.2); }
+
+.dev-card.active::before { opacity: 1; }
+
+.dev-card[data-tier="prime"].active {
+  border-color: var(--iqos-gold);
+  box-shadow: 0 0 14px rgba(201,168,76,0.25);
+}
+.dev-card[data-tier="i"].active,
+.dev-card[data-tier="one"].active {
+  border-color: var(--iqos-teal);
+  box-shadow: 0 0 14px rgba(0,180,216,0.22);
+}
+
+.dev-icon {
+  display: block;
+  font-size: 1.15rem;
+  margin-bottom: 6px;
+  color: var(--iqos-grey);
+}
+
+.dev-card[data-tier="prime"].active .dev-icon { color: var(--iqos-gold); }
+.dev-card[data-tier="i"].active .dev-icon,
+.dev-card[data-tier="one"].active .dev-icon   { color: var(--iqos-teal); }
+
+.dev-name {
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  color: var(--iqos-grey);
+}
+
+.dev-tier {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  margin-top: 2px;
+}
+
+.dev-card[data-tier="prime"] .dev-tier { color: var(--iqos-gold2); }
+
+/* ── COLOR SWATCHES ── */
+.swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--iqos-dark);
+  border: 1px solid var(--iqos-border);
+  border-radius: 999px;
+  padding: 7px 12px 7px 8px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  color: var(--iqos-light);
+  cursor: pointer;
+  transition: all 0.18s;
+  user-select: none;
+}
+
+.swatch:hover { border-color: rgba(255,255,255,0.22); }
+
+.swatch.active {
+  border-color: var(--iqos-teal);
+  background: rgba(0,180,216,0.1);
+  box-shadow: 0 0 0 2px rgba(0,180,216,0.15);
+}
+
+.swatch-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.25);
+  flex-shrink: 0;
+}
+
+/* ── OFFER PILLS ── */
+.pills {
+  display: flex;
+  gap: 7px;
+}
+
+.pill {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--iqos-dark);
+  border: 1px solid var(--iqos-border);
+  border-radius: 999px;
+  padding: 9px 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--iqos-grey);
+  cursor: pointer;
+  transition: all 0.18s;
+  user-select: none;
+}
+
+.pill-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--iqos-grey);
+  transition: all 0.18s;
+}
+
+.pill:hover { border-color: rgba(255,255,255,0.22); }
+
+.pill.on {
+  border-color: var(--iqos-gold);
+  background: rgba(201,168,76,0.1);
+  color: var(--iqos-gold2);
+}
+
+.pill.on .pill-dot {
+  background: var(--iqos-gold);
+  border-color: var(--iqos-gold);
+}
+
+.pill.disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── SALES LIST ── */
+.empty {
+  font-size: 0.78rem;
+  color: var(--iqos-grey);
+  font-style: italic;
+  text-align: center;
+  padding: 14px 0;
+}
+
+.sale-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--iqos-dark);
+  border: 1px solid var(--iqos-border);
+  border-left: 3px solid var(--iqos-teal);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.sale-num {
+  background: var(--iqos-blue);
+  color: var(--iqos-light);
+  font-size: 0.68rem;
+  font-weight: 700;
+  min-width: 22px; height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sale-text {
+  flex: 1;
+  font-size: 0.76rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--iqos-grey);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.delete-btn:hover {
+  color: var(--danger);
+  background: rgba(230,57,70,0.1);
+}
+
+/* ── SUB FORM ── */
+.sub {
+  border-top: 1px dashed var(--iqos-border);
+  margin-top: 14px;
+  padding-top: 16px;
+}
+
+.hint { font-size: 0.69rem; color: var(--iqos-grey); font-style: italic; }
+
+/* Editable sale inputs in output */
+.ed-sale {
+  width: 100%;
+  background: var(--iqos-dark);
+  border: 1px solid var(--iqos-border);
+  border-radius: 8px;
+  color: var(--iqos-white);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.8rem;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.18s, box-shadow 0.18s;
+  display: block;
+  margin-bottom: 7px;
+}
+.ed-sale:focus {
+  border-color: var(--iqos-gold);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
+}
+
+/* ── BUTTONS ── */
+.btn-add {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed var(--iqos-teal);
+  border-radius: 10px;
+  color: var(--iqos-teal);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.btn-add:hover {
+  background: rgba(0,180,216,0.08);
+  border-style: solid;
+}
+
+.btn-gen {
+  display: block;
+  width: calc(100% - 28px);
+  margin: 18px 14px 0;
+  background: linear-gradient(135deg, var(--iqos-teal), var(--iqos-teal2));
+  border: none;
+  border-radius: 12px;
+  color: var(--iqos-dark);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 15px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 18px rgba(0,180,216,0.25);
+}
+
+.btn-gen:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(0,180,216,0.35); }
+.btn-gen:active { transform: translateY(0); }
+
+.btn-copy {
+  width: 100%;
+  background: linear-gradient(135deg, var(--iqos-gold), var(--iqos-gold2));
+  border: none;
+  border-radius: 10px;
+  color: var(--iqos-dark);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  padding: 13px;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: all 0.18s;
+}
+
+.btn-copy:hover { filter: brightness(1.06); }
+
+.btn-copy.done {
+  background: var(--success);
+  color: var(--iqos-dark);
+}
+
+/* ── FOOTER ── */
+.footer {
+  text-align: center;
+  margin-top: 34px;
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  color: var(--iqos-grey);
+}
+
+.footer b { color: var(--iqos-gold2); font-weight: 600; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--iqos-blue);
+  border: 1px solid var(--iqos-teal);
+  color: var(--iqos-light);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 999px;
+  z-index: 99;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+  animation: pop 0.2s ease;
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="logo"><h1>Da<b>Tracker</b></h1><p>Your Report Assistant</p></div>
 
-  <!-- LOGIN -->
-  <div class="card" id="loginCard">
-    <h2>تسجيل الدخول</h2>
-    <label>رقم المستخدم (4 أرقام)</label>
-    <input type="tel" id="last4" maxlength="4" inputmode="numeric" placeholder="• • • •" autocomplete="off">
-    <label>كلمة المرور</label>
-    <input type="password" id="pin" maxlength="10" inputmode="numeric" placeholder="• • • • • • •" autocomplete="off">
-    <button id="loginBtn" onclick="doLogin()">دخول</button>
-    <div class="msg" id="loginMsg"></div>
+<!-- HEADER -->
+<div class="top-bar">
+  <div class="brand-logo">
+    <div class="brand-icon">IQ</div>
+    <div class="brand-name">IQOS</div>
+  </div>
+  <div class="top-sub">Promoter · Sales Report</div>
+</div>
+
+<!-- SESSION -->
+<div class="card">
+  <div class="card-title">Session</div>
+
+  <div class="f">
+    <span class="lbl">Outlet</span>
+    <select id="sel-outlet">
+      <option value="">Select outlet…</option>
+      <option>QAS_Tamimi Buraydah_IP(KA)_MN_BR</option>
+      <option>QAS_Tamimi Unaizah 190_IP(KA)_MN_BR</option>
+      <option>QAS_Tamimi Al Raas S194_DS(KA)_MN_BR</option>
+      <option>QAS_Al-Ghada Super Market_DS(GT)_MN_BR</option>
+      <option>QAS_Nakhlath Al Mazaj_SIS(TB)_MN_BR</option>
+    </select>
   </div>
 
-  <!-- DAY SIGN-IN (promoters) -->
-  <div class="card hidden" id="signinCard">
-    <div class="welcome">حياك الله 👋</div>
-    <div class="pname" id="promoName">—</div>
-    <label>حالة اليوم</label>
-    <div class="opt-grid" id="statusGrid" style="grid-template-columns:1fr 1fr 1fr"></div>
-    <div id="tpWrap">
-      <label>موقع اليوم (Touch Point)</label>
-      <select id="tpSelect"></select>
-      <div id="shiftWrap">
-        <label>الفترة</label>
-        <div class="shift-row">
-          <div class="opt-btn active" id="shiftDay" onclick="pickShift('day')">نهاري ☀️</div>
-          <div class="opt-btn" id="shiftNight" onclick="pickShift('night')">ليلي 🌙</div>
-        </div>
-      </div>
+  <div class="g2">
+    <div class="f" style="margin-bottom:0">
+      <span class="lbl">Date</span>
+      <input type="text" id="inp-date" />
     </div>
-    <button id="signinBtn" onclick="doSignin()">تسجيل اليوم ✅</button>
-    <div class="msg" id="signinMsg"></div>
-    <button class="logout" onclick="doLogout()">تسجيل خروج</button>
-  </div>
-
-  <!-- WORK SCREEN -->
-  <div class="hidden" id="workScreen">
-    <div class="topbar">
-      <div class="info"><b id="wName">—</b><br><span id="wTp">—</span> · <span id="wShift">—</span></div>
-      <button class="exit" onclick="doLogout()">خروج</button>
-    </div>
-    <div id="pastBanner" class="banner info hidden"></div>
-    <div id="offBanner" class="banner calm hidden"></div>
-    <div class="tabs">
-      <div class="tab active" id="tabSales" onclick="showTab('sales')">🛒 المبيعات</div>
-      <div class="tab" id="tabStock" onclick="showTab('stock')">📦 المخزون</div>
-      <div class="tab" id="tabCheck" onclick="showTab('check')">✅ التشيك</div>
-      <div class="tab" id="tabDays" onclick="showTab('days')">📅 أيامي</div>
-    </div>
-
-    <!-- SALES -->
-    <div id="paneSales">
-      <div class="counter">
-        <div><div class="num" id="cToday">0</div><div class="lbl">LAS الجلسة</div></div>
-        <div><div class="num" id="cTarget">—</div><div class="lbl">هدف اليوم</div></div>
-        <div><div class="num" id="cSK">0</div><div class="lbl">SK</div></div>
-        <div><div class="num" id="cMGM">0</div><div class="lbl">MGM</div></div>
-      </div>
-      <div class="card">
-        <h2>تسجيل بيع جديد</h2>
-        <label>الجهاز</label>
-        <div class="opt-grid g3" id="devGrid"></div>
-        <label>اللون</label>
-        <div class="opt-grid" id="colorGrid"></div>
-        <label>نوع البيع</label>
-        <div class="opt-grid" id="typeGrid"></div>
-        <label>العميل</label>
-        <div class="opt-grid" id="custGrid"></div>
-        <button id="saleBtn" onclick="submitSale()">تسجيل البيع ✅</button>
-        <div class="msg" id="saleMsg"></div>
-      </div>
-      <div class="card">
-        <h2>عمليات الجلسة</h2>
-        <div id="salesList"><div class="spin">لا مبيعات بعد</div></div>
-      </div>
-      <div class="card">
-        <h2>📈 منحنى الشهر — LAS مقابل الهدف</h2>
-        <div class="counter">
-          <div><div class="num" id="mSales">0</div><div class="lbl">LAS الشهر</div></div>
-          <div><div class="num" id="mTarget">0</div><div class="lbl">الهدف حتى اليوم</div></div>
-          <div><div class="num" id="mPct">—</div><div class="lbl">نسبة التحقيق</div></div>
-        </div>
-        <div class="chart-card"><canvas id="promoChart" height="190"></canvas></div>
-      </div>
-      <div class="card">
-        <h2>📄 تقرير نهاية الدوام</h2>
-        <label id="gtLabel">عدد الـ Guided Trials</label>
-        <input type="tel" inputmode="numeric" id="gtInput" placeholder="0">
-        <button onclick="genReport()">توليد التقرير 📄</button>
-        <div id="reportWrap" class="hidden">
-          <label>راجع وعدّل قبل النسخ</label>
-          <textarea id="reportBox" style="min-height:220px;font-size:13px;direction:ltr;font-family:monospace"></textarea>
-          <button onclick="copyText('reportBox',this)">نسخ للواتساب 📋</button>
-        </div>
-        <div class="msg" id="reportMsg"></div>
-      </div>
-    </div>
-
-    <!-- STOCK -->
-    <div id="paneStock" class="hidden">
-      <div class="card">
-        <h2>جرد المخزون</h2>
-        <p style="font-size:12px;color:var(--muted)">أدخل الكمية المتوفرة لكل صنف ثم احفظ</p>
-        <div id="stockList"><div class="spin">جاري التحميل...</div></div>
-        <button id="stockBtn" onclick="submitStock()">حفظ الجرد 📦</button>
-        <button onclick="genStockMsg()" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">توليد رسالة الجرد 📋</button>
-        <div id="stockMsgWrap" class="hidden">
-          <label>راجع وعدّل قبل النسخ</label>
-          <textarea id="stockMsgBox" style="min-height:200px;font-size:13px;direction:ltr;font-family:monospace"></textarea>
-          <button onclick="copyText('stockMsgBox',this)">نسخ للواتساب 📋</button>
-        </div>
-        <div class="msg" id="stockMsg"></div>
-      </div>
-    </div>
-
-    <!-- CHECKLIST -->
-    <div id="paneCheck" class="hidden">
-      <div class="card">
-        <h2>التشيك ليست الإلزامية</h2>
-        <div id="checkList"><div class="spin">جاري التحميل...</div></div>
-        <div class="msg" id="checkMsg"></div>
-      </div>
-    </div>
-
-    <!-- MY DAYS (backfill) -->
-    <div id="paneDays" class="hidden">
-      <div class="card">
-        <h2>📅 سجل أيامي هذا الشهر</h2>
-        <p style="font-size:12px;color:var(--muted)">سجّل الأيام الناقصة، وسجّل مبيعات الأيام السابقة من زر 💼</p>
-        <div id="daysList"><div class="spin">جاري التحميل...</div></div>
-        <div class="msg" id="daysMsg"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- STAFF DASHBOARD -->
-  <div class="hidden" id="staffCard">
-    <div class="topbar">
-      <div><div class="welcome" id="staffRole">—</div><div class="pname" id="staffName" style="margin-bottom:0">—</div></div>
-      <button class="exit" onclick="doLogout()">خروج</button>
-    </div>
-    <div id="cityWrap" class="hidden">
-      <label>المنطقة / المدينة</label>
-      <select id="citySelect" onchange="loadStaffCounts()"></select>
-      <div style="height:12px"></div>
-    </div>
-    <div class="tabs">
-      <div class="tab active" id="dOver" onclick="showDash('over')">📊 نظرة</div>
-      <div class="tab" id="dTeam" onclick="showDash('team')">👥 الفريق</div>
-      <div class="tab" id="dPlan" onclick="showDash('plan')">🗺️ الخطة</div>
-      <div class="tab" id="dAdmin" onclick="showDash('admin')">⚙️ إدارة</div>
-    </div>
-    <div id="periodRow" class="tabs" style="margin-bottom:14px">
-      <div class="tab active" id="pToday" onclick="setPeriod('today')">اليوم</div>
-      <div class="tab" id="pWeek" onclick="setPeriod('week')">آخر 7 أيام</div>
-      <div class="tab" id="pMonth" onclick="setPeriod('month')">الشهر</div>
-    </div>
-
-    <div id="paneOver">
-    <div class="counter">
-      <div><div class="num" id="sLas">—</div><div class="lbl">مبيعات LAS</div></div>
-      <div><div class="num" id="sGT">—</div><div class="lbl">Guided Trials</div></div>
-      <div><div class="num" id="sAtt">—</div><div class="lbl">تسجيلات</div></div>
-    </div>
-    <div class="counter" style="margin-top:-4px">
-      <div><div class="num" id="sTotal" style="color:var(--muted);font-size:18px">—</div><div class="lbl">إجمالي النشاط (LAU مشمول)</div></div>
-    </div>
-      <div class="card">
-    <h2>📈 منحنى الشهر — الفريق (LAS) مقابل الهدف</h2>
-    <div class="chart-card"><canvas id="teamChart" height="190"></canvas></div>
-      </div>
-      <div class="card">
-        <h2>📤 تقارير ومشاركة</h2>
-      <button onclick="genSummary()" style="margin-top:14px">📋 توليد ملخص الفترة</button>
-      <div id="sumWrap" class="hidden">
-        <textarea id="sumBox" style="min-height:220px;margin-top:10px;font-size:13px;direction:ltr;font-family:monospace"></textarea>
-        <button onclick="copyText('sumBox',this)">نسخ الملخص 📋</button>
-      </div>
-    <button onclick="exportCSV()" style="margin-top:12px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">⬇️ تصدير سجل الشهر (CSV)</button>
-      </div>
-    </div>
-
-    <div id="paneTeam" class="hidden">
-      <div class="card">
-      <h2>📆 التسجيل + تحقيق الهدف (LAS)</h2>
-      <div id="fillWidget"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>📋 الحضور</h2>
-      <div id="attList"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>🛒 مبيعات المندوبين</h2>
-      <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>📍 مبيعات المواقع</h2>
-      <div id="outletSales"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>📦 جرد المواقع (الفترة)</h2>
-      <div id="stockView"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>✅ التشيك ليست اليوم</h2>
-      <div id="checkView"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>🕐 آخر العمليات</h2>
-      <div id="salesFeed"><div class="spin">جاري التحميل...</div></div>
-      </div>
-    </div>
-
-    <div id="panePlan" class="hidden">
-      <div id="routePlan" class="card hidden">
-        <h2>🗺️ خطة اليوم (Route Plan)</h2>
-        <label>تاريخ الخطة</label>
-        <input type="date" id="rpDate" style="text-align:center" onchange="loadRoutePlan()">
-        <div id="rpSlots" style="margin-top:6px"><div class="spin">جاري التحميل...</div></div>
-        <button onclick="saveRoutePlan()" id="rpBtn">حفظ الخطة 🗺️</button>
-        <button class="ghost" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="genRouteMsg()">توليد رسالة الخطة 📋</button>
-        <div id="rpMsgWrap" class="hidden">
-          <textarea id="rpBox" style="width:100%;min-height:220px;margin-top:10px;padding:12px;border-radius:11px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;text-align:right"></textarea>
-          <button onclick="copyText('rpBox',this)">نسخ للواتساب 📋</button>
-        </div>
-        <div class="msg" id="rpMsg"></div>
-      </div>
-    </div>
-
-    <div id="paneAdmin" class="hidden">
-      <div id="targetsSection" class="card hidden">
-        <h2>🎯 أهداف شهر <span id="tgMonth"></span></h2>
-        <div id="targetsList"><div class="spin">جاري التحميل...</div></div>
-        <button onclick="saveTargets()" id="tgBtn">حفظ الأهداف 🎯</button>
-        <div class="msg" id="tgMsg"></div>
-      </div>
-      <div id="tpManage" class="card hidden">
-        <h2>🏪 إدارة المواقع</h2>
-        <div id="tpList"></div>
-        <label>إضافة موقع جديد</label>
-        <input type="text" id="ntpName" style="text-align:right;letter-spacing:0" placeholder="اسم الموقع (فريد)">
-        <input type="text" id="ntpCode" style="text-align:left;letter-spacing:0;direction:ltr;margin-top:8px" placeholder="Unicode / كود الموقع (اختياري)">
-        <input type="text" id="ntpMaps" style="text-align:left;letter-spacing:0;direction:ltr;margin-top:8px" placeholder="رابط Google Maps (اختياري)">
-        <label>دوامين (نهاري + ليلي)؟</label>
-        <div class="shift-row">
-          <div class="opt-btn active" id="ntpDual-no" onclick="ntpDual(false)">لا — نهاري فقط</div>
-          <div class="opt-btn" id="ntpDual-yes" onclick="ntpDual(true)">نعم — دوامين</div>
-        </div>
-        <label>نوع الموقع</label>
-        <div class="shift-row">
-          <div class="opt-btn active" id="ntpDs-no" onclick="ntpDs(false)">عادي</div>
-          <div class="opt-btn" id="ntpDs-yes" onclick="ntpDs(true)">Direct Sales (DS)</div>
-        </div>
-        <label>هدف الشهر الحالي (اختياري)</label>
-        <div class="shift-row">
-          <input type="text" inputmode="decimal" id="ntpTgDay" placeholder="مبيعات نهاري">
-          <input type="text" inputmode="decimal" id="ntpGtDay" placeholder="GT نهاري">
-        </div>
-        <div class="shift-row hidden" id="ntpNightRow" style="margin-top:8px">
-          <input type="text" inputmode="decimal" id="ntpTgNight" placeholder="مبيعات ليلي">
-          <input type="text" inputmode="decimal" id="ntpGtNight" placeholder="GT ليلي">
-        </div>
-        <button onclick="addTp()">إضافة الموقع ➕</button>
-        <div class="msg" id="tpMsg"></div>
-      </div>
-      <div id="clManage" class="card hidden">
-        <h2>🛠️ إدارة بنود التشيك ليست</h2>
-        <div id="clItems"></div>
-        <label>إضافة بند جديد</label>
-        <input type="text" id="newClItem" style="text-align:right;letter-spacing:0" placeholder="اكتب البند...">
-        <button onclick="addClItem()">إضافة البند ➕</button>
-        <div class="msg" id="clMsg"></div>
+    <div class="f" style="margin-bottom:0">
+      <span class="lbl">Shift</span>
+      <div class="seg" id="seg-shift">
+        <div class="seg-btn" onclick="onSeg(this)">Day</div>
+        <div class="seg-btn" onclick="onSeg(this)">Night</div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- SALES -->
+<div class="card">
+  <div class="card-title">
+    Sales <span class="badge" id="cnt">0</span>
+  </div>
+
+  <div id="sales-list"><div class="empty">No entries yet</div></div>
+
+  <div class="sub">
+    <!-- DEVICE -->
+    <div class="f">
+      <span class="lbl">Device</span>
+      <div class="device-cards">
+        <div class="dev-card" data-tier="prime" onclick="onDevice(this,'ILUMA i PRIME')">
+          <span class="dev-icon">◈</span>
+          <div class="dev-name">ILUMA i</div>
+          <div class="dev-tier">PRIME</div>
+        </div>
+        <div class="dev-card" data-tier="i" onclick="onDevice(this,'ILUMA i')">
+          <span class="dev-icon">◇</span>
+          <div class="dev-name">ILUMA</div>
+          <div class="dev-tier">i</div>
+        </div>
+        <div class="dev-card" data-tier="one" onclick="onDevice(this,'ILUMA i ONE')">
+          <span class="dev-icon">○</span>
+          <div class="dev-name">ILUMA i</div>
+          <div class="dev-tier">ONE</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLOR -->
+    <div class="f">
+      <span class="lbl">Color</span>
+      <div class="swatch-grid" id="color-grp">
+        <span class="hint">Select a device first</span>
+      </div>
+    </div>
+
+    <!-- CUSTOMER + OFFER -->
+    <div class="g2" style="margin-bottom:0">
+      <div class="f" style="margin-bottom:0">
+        <span class="lbl">Customer</span>
+        <div class="seg" id="seg-state">
+          <div class="seg-btn" onclick="onState(this)">LAS</div>
+          <div class="seg-btn" onclick="onState(this)">LAU</div>
+        </div>
+      </div>
+      <div class="f" style="margin-bottom:0">
+        <span class="lbl">Offer</span>
+        <div class="pills" id="offers">
+          <div class="pill" data-v="SK"  onclick="onPill(this)"><span class="pill-dot"></span>S.K</div>
+          <div class="pill" data-v="LD"  onclick="onPill(this)"><span class="pill-dot"></span>L.D</div>
+          <div class="pill" data-v="MGM" onclick="onPill(this)"><span class="pill-dot"></span>MGM</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-add" onclick="addSale()">+ Add Entry</button>
+  </div>
+</div>
+
+<!-- GUIDED TRIALS -->
+<div class="card">
+  <div class="card-title">Guided Trials</div>
+  <div class="f" style="margin-bottom:0">
+    <span class="lbl">Number of G.T conducted this shift</span>
+    <input type="number" id="inp-gt" min="0" value="0" />
+  </div>
+</div>
+
+<!-- GENERATE -->
+<button class="btn-gen" onclick="genReport()">⚡ Generate Report</button>
+
+<!-- OUTPUT -->
+<div id="out-sec" class="card" style="display:none">
+  <div class="card-title">Report · Review &amp; Edit</div>
+
+  <div class="f">
+    <span class="lbl">Outlet</span>
+    <input type="text" id="ed-outlet" />
+  </div>
+  <div class="g2">
+    <div class="f" style="margin-bottom:0">
+      <span class="lbl">Date</span>
+      <input type="text" id="ed-date" />
+    </div>
+    <div class="f" style="margin-bottom:0">
+      <span class="lbl">Shift</span>
+      <input type="text" id="ed-shift" />
+    </div>
+  </div>
+
+  <div class="f">
+    <span class="lbl">Sales entries</span>
+    <div id="ed-sales-wrap"></div>
+  </div>
+
+  <div class="g2">
+    <div class="f" style="margin-bottom:0">
+      <span class="lbl">Total sales</span>
+      <input type="number" id="ed-total" min="0" />
+    </div>
+    <div class="f" style="margin-bottom:0">
+      <span class="lbl">Guided trials</span>
+      <input type="number" id="ed-gt" min="0" />
+    </div>
+  </div>
+
+  <button class="btn-copy" id="btn-copy" onclick="copyReport()">Copy to Clipboard</button>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">designed by <b>AhmedS</b></div>
+
 <script>
-if (typeof supabase === 'undefined') {
-  document.body.innerHTML = '<div style="color:#e5604f;text-align:center;padding:40px;font-family:sans-serif">فشل تحميل مكتبة الاتصال — تأكد من الإنترنت وحدّث الصفحة</div>';
-  throw new Error('supabase-js failed to load');
-}
-const SUPABASE_URL = "https://lgewtvrqfofnkrfzqqlz.supabase.co";
-const SUPABASE_KEY = "sb_publishable_lrw3zxHRNhgOYqwivMhrjQ_QV5z-NmN";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // ── State ──
+  let sales = [];
+  let currentDevice = '';
+  let currentColor = '';
 
-const DEVICES = {
-  'ILUMA i Prime': ['Midnight Black','Aspen Green','Electric Purple','Garnet Red','Breeze Blue'],
-  'ILUMA i': ['Leaf Green','Vivid Terracotta','Digital Violet','Midnight Black','Breeze Blue','Electric Purple'],
-  'ILUMA i One': ['Leaf Green','Vivid Terracotta','Digital Violet','Midnight Black','Breeze Blue','Electric Purple']
-};
-const DEV_SHORT = {'ILUMA i Prime':'PRIME','ILUMA i':'ILUMA i','ILUMA i One':'ONE'};
-const TYPES = ['SK','MGM','SK+MGM','LD'];
-const CUSTS = ['LAS','LAU'];
-const STATUSES = {work:'دوام 🏪', off:'أوف 🌴', sick:'مرضية 🤒', leave:'استئذان 🕐', absent:'غياب 🚫'};
-const curMonth=()=>new Date().toISOString().slice(0,7);
-const MONTH_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-const curMonthName=()=>MONTH_AR[new Date().getMonth()]+' '+new Date().getFullYear();
-const todayStr=()=>new Date().toISOString().slice(0,10);
-
-let profile=null, touchPoints=[], chosenShift='day', chosenStatus='work';
-let session=null;        // active attendance session (today or a past day)
-let todaySession=null;   // today's attendance record
-let sel={dev:null,color:null,type:null,cust:null};
-let stockCatalog=[], checkItems=[];
-
-const $=id=>document.getElementById(id);
-const screens=['loginCard','signinCard','workScreen','staffCard'];
-const show=id=>{screens.forEach(s=>$(s).classList.add('hidden'));$(id).classList.remove('hidden')};
-const msg=(id,t,ty)=>{const e=$(id);e.textContent=t;e.className='msg '+ty;if(ty==='ok')setTimeout(()=>{e.className='msg'},2500)};
-function copyText(boxId,btn){navigator.clipboard.writeText($(boxId).value).then(()=>{const o=btn.textContent;btn.textContent='✅ تم النسخ';setTimeout(()=>btn.textContent=o,2000)})}
-
-// ============ AUTH ============
-async function doLogin(){
-  const l=$('last4').value.trim(),p=$('pin').value.trim();
-  if(l.length!==4||p.length<6)return msg('loginMsg','أدخل رقم المستخدم وكلمة المرور كاملة','err');
-  $('loginBtn').disabled=true;
-  const{error}=await db.auth.signInWithPassword({email:`${l}@example.com`,password:p});
-  $('loginBtn').disabled=false;
-  if(error)return msg('loginMsg','بيانات الدخول غير صحيحة','err');
-  route();
-}
-async function route(){
-  const{data:{user}}=await db.auth.getUser();
-  if(!user)return show('loginCard');
-  const{data:prof}=await db.from('users').select('*').eq('id',user.id).single();
-  if(!prof){msg('loginMsg','حسابك غير مسجل — كلّم المشرف','err');await db.auth.signOut();return show('loginCard')}
-  profile=prof;
-  if(prof.role==='promoter')return promoterFlow();
-  return staffFlow();
-}
-async function doLogout(){await db.auth.signOut();profile=null;session=null;todaySession=null;$('last4').value='';$('pin').value='';show('loginCard')}
-
-// ============ PROMOTER: DAY SIGN-IN ============
-async function promoterFlow(){
-  const{data:att}=await db.from('attendance').select('*, touch_points(name,dual_shift)')
-    .eq('promoter_id',profile.id).eq('work_date',todayStr())
-    .order('checked_in_at',{ascending:false}).limit(1);
-  if(att&&att.length){todaySession=att[0];session=todaySession;return openWork()}
-  $('promoName').textContent=profile.full_name;
-  buildStatusGrid();
-  const{data:tps}=await db.from('touch_points').select('*').eq('active',true).eq('city',profile.city).order('name');
-  touchPoints=tps||[];
-  $('tpSelect').innerHTML=touchPoints.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  $('tpSelect').onchange=updateShiftUI;
-  // pre-fill from today's route plan
-  const{data:plan}=await db.from('route_plans').select('touch_point_id,shift').eq('plan_date',todayStr()).eq('promoter_id',profile.id).limit(1);
-  updateShiftUI();
-  if(plan&&plan.length){
-    $('tpSelect').value=plan[0].touch_point_id;
-    updateShiftUI();
-    if(plan[0].shift==='night')pickShift('night');
-    msg('signinMsg',`خطتك اليوم جاهزة من المشرف 🗺️ ${plan[0].shift==='day'?'☀️':'🌙'}`,'ok');
-  }
-  show('signinCard');
-}
-function buildStatusGrid(){
-  $('statusGrid').innerHTML=Object.keys(STATUSES).map(s=>`<div class="opt-btn ${s===chosenStatus?'active':''}" id="st-${s}" onclick="pickStatus('${s}')">${STATUSES[s]}</div>`).join('');
-}
-function pickStatus(s){
-  chosenStatus=s;
-  Object.keys(STATUSES).forEach(x=>$('st-'+x).classList.toggle('active',x===s));
-  $('tpWrap').style.display=s==='work'?'block':'none';
-}
-function updateShiftUI(){
-  const tp=touchPoints.find(t=>t.id==$('tpSelect').value);
-  $('shiftWrap').style.display=(tp&&tp.dual_shift)?'block':'none';
-  if(!(tp&&tp.dual_shift))chosenShift='day';
-}
-function pickShift(s){chosenShift=s;$('shiftDay').classList.toggle('active',s==='day');$('shiftNight').classList.toggle('active',s==='night')}
-async function doSignin(){
-  $('signinBtn').disabled=true;
-  const row=chosenStatus==='work'
-    ?{promoter_id:profile.id,touch_point_id:parseInt($('tpSelect').value),shift:chosenShift,status:'work'}
-    :{promoter_id:profile.id,status:chosenStatus};
-  const{data,error}=await db.from('attendance').insert(row).select('*, touch_points(name,dual_shift)').single();
-  $('signinBtn').disabled=false;
-  if(error){
-    if(error.code==='23505')return msg('signinMsg','يومك مسجل مسبقاً لهذه الفترة ✋','err');
-    return msg('signinMsg','خطأ في التسجيل — حاول مجدداً','err');
-  }
-  todaySession=data;session=data;openWork();
-}
-
-// ============ WORK SCREEN ============
-function isPast(){return session&&session.work_date!==todayStr()}
-async function openWork(){
-  $('wName').textContent=profile.full_name;
-  const working=session.status==='work';
-  $('wTp').textContent=working?(session.touch_points?session.touch_points.name.split('_')[1]||session.touch_points.name:'—'):STATUSES[session.status];
-  $('wShift').textContent=working?(session.shift==='day'?'دوام نهاري ☀️':'دوام ليلي 🌙'):session.work_date;
-  // banners
-  $('pastBanner').classList.toggle('hidden',!isPast());
-  if(isPast())$('pastBanner').innerHTML=`تسجّل الآن على يوم <b>${session.work_date}</b> — <a href="#" onclick="returnToday();return false" style="color:var(--gold)">العودة لليوم الحالي ↩</a>`;
-  $('offBanner').classList.toggle('hidden',working);
-  if(!working)$('offBanner').textContent='يومك مسجل — لا مهام مطلوبة اليوم ✅';
-  // tabs visibility
-  $('tabSales').style.display=working?'block':'none';
-  $('tabStock').style.display=(working&&!isPast())?'block':'none';
-  $('tabCheck').style.display=(working&&!isPast())?'block':'none';
-  $('tabDays').style.display='block';
-  show('workScreen');
-  if(working){buildSaleUI();showTab('sales');loadMyTarget();loadTodaySales();loadMyAnalytics()}
-  else showTab('days');
-}
-async function returnToday(){
-  session=todaySession;
-  if(!session){promoterFlow();return}
-  openWork();
-}
-function showTab(t){
-  ['Sales','Stock','Check','Days'].forEach(x=>{
-    $('tab'+x).classList.toggle('active',x.toLowerCase()===t);
-    $('pane'+x).classList.toggle('hidden',x.toLowerCase()!==t);
-  });
-  if(t==='stock'&&!stockCatalog.length)loadStock();
-  if(t==='check'&&!checkItems.length)loadChecklist();
-  if(t==='days')loadDays();
-}
-
-// ---- SALES ----
-function buildSaleUI(){
-  $('devGrid').innerHTML=Object.keys(DEVICES).map(d=>`<div class="opt-btn" onclick="pickDev('${d}')" id="dev-${DEV_SHORT[d]}">${DEV_SHORT[d]}</div>`).join('');
-  $('typeGrid').innerHTML=TYPES.map(t=>`<div class="opt-btn" onclick="pickOpt('type','${t}')" id="type-${t}">${t}</div>`).join('');
-  $('custGrid').innerHTML=CUSTS.map(c=>`<div class="opt-btn" onclick="pickOpt('cust','${c}')" id="cust-${c}">${c}</div>`).join('');
-  $('colorGrid').innerHTML='<div class="spin">اختر الجهاز أولاً</div>';
-}
-function pickDev(d){
-  sel.dev=d;sel.color=null;
-  Object.keys(DEVICES).forEach(x=>$('dev-'+DEV_SHORT[x]).classList.toggle('active',x===d));
-  $('colorGrid').innerHTML=DEVICES[d].map(c=>`<div class="opt-btn" onclick="pickColor('${c}')">${c}</div>`).join('');
-}
-function pickColor(c){sel.color=c;document.querySelectorAll('#colorGrid .opt-btn').forEach(b=>b.classList.toggle('active',b.textContent===c))}
-function pickOpt(k,v){
-  if(k==='type'&&(v==='MGM'||v==='SK+MGM')&&sel.cust==='LAU')return msg('saleMsg','عروض MGM لعملاء LAS فقط','err');
-  if(k==='cust'&&v==='LAU'&&(sel.type==='MGM'||sel.type==='SK+MGM')){sel.type=null;TYPES.forEach(x=>$('type-'+x).classList.remove('active'))}
-  sel[k]=v;const list=k==='type'?TYPES:CUSTS;list.forEach(x=>$(k+'-'+x).classList.toggle('active',x===v));
-}
-async function loadMyTarget(){
-  const{data}=await db.from('targets').select('daily_target,gt_target')
-    .eq('touch_point_id',session.touch_point_id).eq('shift',session.shift).eq('month',session.work_date.slice(0,7)).maybeSingle();
-  $('cTarget').textContent=data?Number(data.daily_target):'—';
-  window.myGtTarget=data?Number(data.gt_target):null;
-  $('gtLabel').textContent=window.myGtTarget!=null?`عدد الـ Guided Trials (الهدف: ${window.myGtTarget})`:'عدد الـ Guided Trials';
-}
-async function submitSale(){
-  if(!sel.dev||!sel.color||!sel.type||!sel.cust)return msg('saleMsg','أكمل كل الخيارات الأربعة','err');
-  $('saleBtn').disabled=true;
-  const{error}=await db.from('sell_operations').insert({
-    attendance_id:session.id,promoter_id:profile.id,work_date:session.work_date,
-    device_type:sel.dev,color:sel.color,sale_type:sel.type,customer_type:sel.cust
-  });
-  $('saleBtn').disabled=false;
-  if(error)return msg('saleMsg','خطأ في التسجيل','err');
-  msg('saleMsg','تم تسجيل البيع 🎉','ok');
-  sel={dev:null,color:null,type:null,cust:null};
-  buildSaleUI();loadTodaySales();loadMyAnalytics();
-}
-async function loadTodaySales(){
-  const{data}=await db.from('sell_operations').select('*').eq('attendance_id',session.id).order('created_at',{ascending:false});
-  const sales=data||[];
-  const lasN=sales.filter(s=>s.customer_type==='LAS').length;
-  const lauN=sales.length-lasN;
-  $('cToday').textContent=lasN;
-  $('cToday').title='LAS: '+lasN+(lauN?' · LAU: '+lauN+' (لا يحتسب بالهدف)':'');
-  $('cSK').textContent=sales.filter(s=>s.sale_type==='SK'||s.sale_type==='SK+MGM').length;
-  $('cMGM').textContent=sales.filter(s=>s.sale_type==='MGM'||s.sale_type==='SK+MGM').length;
-  $('salesList').innerHTML=sales.length?sales.map(s=>`
-    <div class="sale-item">
-      <div><b>${DEV_SHORT[s.device_type]||s.device_type}</b> — ${s.color}
-        <div class="meta">${s.sale_type} · ${s.customer_type} · ${new Date(s.created_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>
-      </div>
-      <button class="del" onclick="delSale(${s.id})">🗑️</button>
-    </div>`).join(''):'<div class="spin">لا مبيعات بعد</div>';
-}
-async function delSale(id){
-  if(!confirm('حذف هذه العملية؟'))return;
-  await db.from('sell_operations').delete().eq('id',id).eq('promoter_id',profile.id);
-  loadTodaySales();loadMyAnalytics();
-}
-
-// ---- MY ANALYTICS (curve) ----
-let promoChartObj=null;
-async function loadMyAnalytics(){
-  const m=curMonth();
-  const[{data:sales},{data:att},{data:tgs}]=await Promise.all([
-    db.from('sell_operations').select('work_date').eq('promoter_id',profile.id).eq('customer_type','LAS').gte('work_date',m+'-01'),
-    db.from('attendance').select('work_date,shift,status,touch_point_id').eq('promoter_id',profile.id).gte('work_date',m+'-01'),
-    db.from('targets').select('touch_point_id,shift,daily_target').eq('month',m)
-  ]);
-  const tmap={};(tgs||[]).forEach(t=>tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target));
-  const daysInView=new Date().getDate();
-  const labels=[],cumS=[],cumT=[];
-  let s=0,t=0;
-  const salesBy={};(sales||[]).forEach(x=>salesBy[x.work_date]=(salesBy[x.work_date]||0)+1);
-  const attBy={};(att||[]).forEach(a=>{if(a.status==='work')attBy[a.work_date]=(attBy[a.work_date]||0)+(tmap[a.touch_point_id+'-'+a.shift]||0)});
-  for(let d=1;d<=daysInView;d++){
-    const dt=m+'-'+String(d).padStart(2,'0');
-    s+=salesBy[dt]||0; t+=attBy[dt]||0;
-    labels.push(d);cumS.push(s);cumT.push(Math.round(t*100)/100);
-  }
-  $('mSales').textContent=s;
-  $('mTarget').textContent=Math.round(t*100)/100;
-  $('mPct').textContent=t>0?Math.round(s/t*100)+'%':'—';
-  if(promoChartObj)promoChartObj.destroy();
-  promoChartObj=drawCurve('promoChart',labels,cumS,cumT);
-}
-function drawCurve(canvasId,labels,actual,target){
-  return new Chart($(canvasId),{
-    type:'line',
-    data:{labels,datasets:[
-      {label:'LAS المحقق',data:actual,borderColor:'#d8bd84',backgroundColor:'rgba(216,189,132,.12)',fill:true,tension:.3,pointRadius:0,borderWidth:2},
-      {label:'الهدف',data:target,borderColor:'#8a93a3',borderDash:[6,5],fill:false,tension:.2,pointRadius:0,borderWidth:1.6}
-    ]},
-    options:{
-      responsive:true,
-      plugins:{legend:{labels:{color:'#8a93a3',font:{size:11}}}},
-      scales:{
-        x:{ticks:{color:'#5c6675',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#5c6675',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'},beginAtZero:true}
-      }
-    }
-  });
-}
-
-// ---- END-OF-SHIFT REPORT ----
-async function genReport(){
-  const gt=parseInt($('gtInput').value)||0;
-  const{data}=await db.from('sell_operations').select('*').eq('attendance_id',session.id).order('created_at');
-  const sales=data||[];
-  const outlet=session.touch_points?(session.touch_points.name.split('_')[1]||session.touch_points.name):'موقعك';
-  const shiftAr=session.shift==='day'?'نهاري ☀️':'ليلي 🌙';
-  // LAS vs target achievement (only LAS counts)
-  const lasCount=sales.filter(s=>s.customer_type==='LAS').length;
-  let tgt=null;
-  const{data:tg}=await db.from('targets').select('daily_target').eq('touch_point_id',session.touch_point_id).eq('shift',session.shift).eq('month',session.work_date.slice(0,7)).maybeSingle();
-  if(tg)tgt=Number(tg.daily_target);
-  // ---- VERIFICATION DIALOG ----
-  let confirmMsg='📍 أنت في: '+outlet+' — '+shiftAr+'\n\n';
-  confirmMsg+='🛒 إجمالي المبيعات: '+sales.length+'\n';
-  confirmMsg+='   (منها '+lasCount+' LAS)\n';
-  confirmMsg+='🎯 Guided Trials: '+gt+'\n\n';
-  if(sales.length===0){
-    confirmMsg+='⚠️ لم تسجّل أي مبيعة اليوم!\nإذا عندك مبيعات، ارجع وسجّلها قبل الإرسال.\n\n';
-  }
-  if(tgt&&tgt>0){
-    const pct=Math.round(lasCount/tgt*100);
-    confirmMsg+='📊 تحقيق الهدف: '+lasCount+'/'+tgt+' ('+pct+'%)\n';
-    if(pct<70)confirmMsg+='🔴 تحقيقك أقل من الهدف — متأكد إنك سجّلت كل مبيعاتك؟\n';
-    else if(pct<100)confirmMsg+='🟡 قريب من الهدف.\n';
-    else confirmMsg+='🟢 ممتاز! حققت هدفك.\n';
-    confirmMsg+='\n';
-  }
-  confirmMsg+='هل الأرقام صحيحة وتريد إنشاء التقرير؟';
-  if(!confirm(confirmMsg))return;
-  // confirmed → now save GT + build report
-  await db.from('attendance').update({guided_trials:gt}).eq('id',session.id);
-  const[y,mo,dd]=session.work_date.split('-');
-  const lines=[];
-  lines.push(session.touch_points?session.touch_points.name:'');
-  lines.push(`Date : ${dd}/${mo}/${y}`);
-  lines.push(`Shift : ${session.shift==='day'?'Day':'Night'}`);
-  lines.push('');lines.push('');
-  if(!sales.length){lines.push('No sales');}
-  else{sales.forEach((s,i)=>lines.push(`${i+1}. ${DEV_SHORT[s.device_type]||s.device_type} - ${s.color} | ${s.customer_type} | ${s.sale_type}`));}
-  lines.push('______________________');
-  lines.push(`Total sales : ${sales.length}`);
-  lines.push(`Guided trials : ${gt}`);
-  $('reportBox').value=lines.join('\n');
-  $('reportWrap').classList.remove('hidden');
-}
-
-// ---- STOCK ----
-async function loadStock(){
-  const{data}=await db.from('stock_catalog').select('*').eq('active',true).order('sort_order');
-  stockCatalog=data||[];
-  let html='',lastCat='';
-  stockCatalog.forEach(it=>{
-    if(it.category!==lastCat){lastCat=it.category;html+=`<div class="cat-title">${it.category==='device'?'🔌 الأجهزة':'🚬 TEREA'}</div>`}
-    html+=`<div class="stock-row"><span>${it.item_name.replace('IQOS ILUMA i ','').replace('IQOS ','')}</span><input type="tel" inputmode="numeric" id="stk-${it.id}" placeholder="0"></div>`;
-  });
-  $('stockList').innerHTML=html||'<div class="spin">لا أصناف</div>';
-}
-async function submitStock(){
-  $('stockBtn').disabled=true;
-  const rows=stockCatalog.map(it=>{
-    const v=$('stk-'+it.id).value.trim();
-    return v===''?null:{attendance_id:session.id,promoter_id:profile.id,item_id:it.id,quantity:parseInt(v)||0};
-  }).filter(Boolean);
-  if(!rows.length){$('stockBtn').disabled=false;return msg('stockMsg','أدخل كمية لصنف واحد على الأقل','err')}
-  const{error}=await db.from('stock_reports').upsert(rows,{onConflict:'attendance_id,item_id'});
-  $('stockBtn').disabled=false;
-  if(error)return msg('stockMsg','خطأ في الحفظ','err');
-  msg('stockMsg',`تم حفظ ${rows.length} صنف ✅`,'ok');
-}
-function genStockMsg(){
-  const[y,mo,dd]=session.work_date.split('-');
-  const outlet=session.touch_points?session.touch_points.name:'';
-  const val=id=>{const el=$('stk-'+id);return el&&el.value.trim()!==''?el.value.trim():''};
-  const find=frag=>stockCatalog.filter(it=>it.item_name.includes(frag));
-  const colorOnly=nm=>nm.split('—').pop().trim().toUpperCase();
-  const L=[`Date: ${dd}/${mo}/${y}`,`Outlet: ${outlet}`];
-  const grp=(header,items)=>{
-    L.push('________');L.push(header+':');
-    items.forEach(it=>L.push(`${colorOnly(it.item_name)}: ${val(it.id)}`));
+  const COLORS = {
+    'ILUMA i PRIME': ['GARNET RED','MIDNIGHT BLACK','BREEZE BLUE','ASPEN GREEN'],
+    'ILUMA i':       ['BREEZE BLUE','LEAF GREEN','MIDNIGHT BLACK','VIVID TERRACOTTA','DIGITAL VIOLET'],
+    'ILUMA i ONE':   ['BREEZE BLUE','LEAF GREEN','MIDNIGHT BLACK','VIVID TERRACOTTA','DIGITAL VIOLET'],
   };
-  grp('IQOS ILUMA PRIME i',find('PRIME'));
-  grp('IQOS ILUMA i',stockCatalog.filter(it=>it.item_name.includes('ILUMA i —')));
-  grp('IQOS ILUMA i ONE',find('ONE'));
-  // Starter kits = TEREA flavors
-  L.push('_______');L.push('STARTER KITS');L.push('');
-  find('TEREA').forEach(it=>L.push(`${it.item_name.replace('TEREA ','').toUpperCase()}: ${val(it.id)}`));
-  const lines=L;
-  $('stockMsgBox').value=lines.join('\n');
-  $('stockMsgWrap').classList.remove('hidden');
-}
 
-// ---- CHECKLIST ----
-async function loadChecklist(){
-  const{data:items}=await db.from('checklist_items').select('*').eq('active',true).order('sort_order');
-  checkItems=items||[];
-  const{data:resp}=await db.from('checklist_responses').select('*').eq('promoter_id',profile.id).eq('work_date',todayStr());
-  const done=new Set((resp||[]).filter(r=>r.checked).map(r=>r.item_id));
-  $('checkList').innerHTML=checkItems.map(it=>`
-    <div class="chk-row ${done.has(it.id)?'done':''}" id="chk-${it.id}" onclick="toggleCheck(${it.id})">
-      <div class="chk-box">${done.has(it.id)?'✓':''}</div><span>${it.title}</span>
-    </div>`).join('')||'<div class="spin">لا بنود</div>';
-}
-async function toggleCheck(id){
-  const row=$('chk-'+id);
-  const isDone=row.classList.contains('done');
-  const{error}=await db.from('checklist_responses').upsert(
-    {item_id:id,promoter_id:profile.id,work_date:todayStr(),checked:!isDone},
-    {onConflict:'item_id,promoter_id,work_date'});
-  if(error)return msg('checkMsg','خطأ — حاول مجدداً','err');
-  row.classList.toggle('done');
-  row.querySelector('.chk-box').textContent=isDone?'':'✓';
-}
+  const SWATCH_HEX = {
+    'GARNET RED':       '#8a1f2d',
+    'MIDNIGHT BLACK':   '#15151a',
+    'BREEZE BLUE':      '#7fb6d9',
+    'ASPEN GREEN':      '#3f6b52',
+    'LEAF GREEN':       '#4c9a2a',
+    'VIVID TERRACOTTA': '#c8553d',
+    'DIGITAL VIOLET':   '#7b5ee6',
+  };
 
-// ---- MY DAYS (backfill) ----
-async function loadDays(){
-  if(!touchPoints.length){
-    const{data:tps}=await db.from('touch_points').select('*').eq('active',true).eq('city',profile.city).order('name');
-    touchPoints=tps||[];
+  // ── Set today's date (dd/ mm/ yyyy) ──
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2,'0');
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const yyyy = today.getFullYear();
+  document.getElementById('inp-date').value = `${dd}/ ${mm}/ ${yyyy}`;
+
+  // ── Generic segmented toggle (Day/Night) ──
+  function onSeg(el) {
+    el.parentElement.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
   }
-  const m=curMonth();
-  const{data:recs}=await db.from('attendance').select('*, touch_points(name,dual_shift)')
-    .eq('promoter_id',profile.id).gte('work_date',m+'-01').order('work_date',{ascending:false});
-  const byDate={};
-  (recs||[]).forEach(r=>{byDate[r.work_date]=byDate[r.work_date]||[];byDate[r.work_date].push(r)});
-  const dNow=new Date().getDate();
-  const DAY_AR=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-  let html='';
-  for(let d=dNow;d>=1;d--){
-    const dt=m+'-'+String(d).padStart(2,'0');
-    const dayName=DAY_AR[new Date(dt+'T12:00:00').getDay()];
-    const rows=byDate[dt];
-    if(rows){
-      rows.forEach(r=>{
-        html+=`<div class="sale-item"><div><b>${d} — ${dayName}</b>
-          <div class="meta">${r.status==='work'?((r.touch_points?r.touch_points.name.split('_')[1]:'')+' · '+(r.shift==='day'?'نهاري ☀️':'ليلي 🌙')+' · GT: '+r.guided_trials):STATUSES[r.status]}</div>
-        </div><span style="display:flex;gap:6px">
-          ${r.status==='work'?`<button style="width:auto;margin:0;padding:7px 10px;font-size:11.5px" onclick="switchSession(${r.id})">💼 مبيعاته</button>`:''}
-          <button class="del" onclick="delDay(${r.id})">🗑️</button>
-        </span></div>`;
-      });
-    }else{
-      html+=`<div class="sale-item" style="border-style:dashed;opacity:.85"><div><b>${d} — ${dayName}</b>
-        <div class="meta" style="color:var(--red)">غير مسجل</div></div>
-        <button style="width:auto;margin:0;padding:7px 10px;font-size:11.5px" onclick="openBackfill('${dt}')">تسجيل ➕</button>
-      </div><div id="bf-${dt}" class="hidden" style="padding:10px 6px;border:1px dashed var(--line);border-radius:11px;margin-top:6px"></div>`;
+
+  // ── Customer state (LAS/LAU) — re-applies offer rules ──
+  function onState(el) {
+    onSeg(el);
+    applyOfferRules();
+  }
+
+  // ── Device selection ──
+  function onDevice(el, device) {
+    document.querySelectorAll('.dev-card').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    currentDevice = device;
+    currentColor = '';
+    renderColors(device);
+  }
+
+  function renderColors(device) {
+    const grp = document.getElementById('color-grp');
+    const colors = COLORS[device] || [];
+    grp.innerHTML = colors.map(c => `
+      <div class="swatch" onclick="pickColor(this,'${c}')">
+        <span class="swatch-dot" style="background:${SWATCH_HEX[c] || 'var(--iqos-grey)'}"></span>${c}
+      </div>`).join('');
+  }
+
+  function pickColor(el, color) {
+    document.querySelectorAll('#color-grp .swatch').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+    currentColor = color;
+  }
+
+  // ── Offer pills + business rules ──
+  // Rule 1: only LAS can get MGM
+  // Rule 2: L.D is exclusive — no SK, no MGM with it
+  function getState() {
+    const a = document.querySelector('#seg-state .seg-btn.active');
+    return a ? a.textContent.trim() : '';
+  }
+
+  function pill(v) { return document.querySelector(`#offers .pill[data-v="${v}"]`); }
+
+  function onPill(el) {
+    if (el.classList.contains('disabled')) return;
+    el.classList.toggle('on');
+    const v = el.dataset.v;
+
+    if (v === 'LD' && el.classList.contains('on')) {
+      pill('SK').classList.remove('on');
+      pill('MGM').classList.remove('on');
+    }
+    if ((v === 'SK' || v === 'MGM') && el.classList.contains('on')) {
+      pill('LD').classList.remove('on');
+    }
+    applyOfferRules();
+  }
+
+  function applyOfferRules() {
+    const state = getState();
+    const ld  = pill('LD');
+    const sk  = pill('SK');
+    const mgm = pill('MGM');
+
+    // reset
+    [ld, sk, mgm].forEach(p => p.classList.remove('disabled'));
+
+    // Rule 1: LAU can never get MGM
+    if (state === 'LAU') {
+      mgm.classList.remove('on');
+      mgm.classList.add('disabled');
+    }
+
+    // Rule 2: L.D excludes SK & MGM (and vice-versa)
+    if (ld.classList.contains('on')) {
+      sk.classList.remove('on');  sk.classList.add('disabled');
+      mgm.classList.remove('on'); mgm.classList.add('disabled');
+    } else if (sk.classList.contains('on') || mgm.classList.contains('on')) {
+      ld.classList.remove('on');
+      ld.classList.add('disabled');
     }
   }
-  $('daysList').innerHTML=html||'<div class="spin">لا أيام</div>';
-}
-let bfState={};
-function openBackfill(dt){
-  const box=$('bf-'+dt);
-  box.classList.toggle('hidden');
-  if(!box.classList.contains('hidden')&&!box.innerHTML){
-    bfState[dt]={status:'work',shift:'day',tp:touchPoints.length?touchPoints[0].id:null};
-    box.innerHTML=`
-      <label>حالة اليوم</label>
-      <div class="opt-grid g3">${Object.keys(STATUSES).map(s=>`<div class="opt-btn ${s==='work'?'active':''}" id="bfst-${dt}-${s}" onclick="bfPick('${dt}','status','${s}')">${STATUSES[s]}</div>`).join('')}</div>
-      <div id="bfwork-${dt}">
-        <label>الموقع</label>
-        <select id="bftp-${dt}" onchange="bfState['${dt}'].tp=parseInt(this.value)">${touchPoints.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}</select>
-        <label>الفترة</label>
-        <div class="shift-row">
-          <div class="opt-btn active" id="bfsh-${dt}-day" onclick="bfPick('${dt}','shift','day')">نهاري ☀️</div>
-          <div class="opt-btn" id="bfsh-${dt}-night" onclick="bfPick('${dt}','shift','night')">ليلي 🌙</div>
-        </div>
-      </div>
-      <button style="margin-top:12px" onclick="saveBackfill('${dt}')">حفظ اليوم ✅</button>`;
-  }
-}
-function bfPick(dt,k,v){
-  bfState[dt][k]=v;
-  if(k==='status'){
-    Object.keys(STATUSES).forEach(x=>$('bfst-'+dt+'-'+x).classList.toggle('active',x===v));
-    $('bfwork-'+dt).style.display=v==='work'?'block':'none';
-  }else{
-    ['day','night'].forEach(x=>$('bfsh-'+dt+'-'+x).classList.toggle('active',x===v));
-  }
-}
-async function saveBackfill(dt){
-  const st=bfState[dt];
-  const row=st.status==='work'
-    ?{promoter_id:profile.id,work_date:dt,status:'work',touch_point_id:st.tp,shift:st.shift}
-    :{promoter_id:profile.id,work_date:dt,status:st.status};
-  const{error}=await db.from('attendance').insert(row);
-  if(error){
-    if(error.code==='23505')return msg('daysMsg','هذا اليوم مسجل مسبقاً لنفس الفترة','err');
-    return msg('daysMsg','خطأ في الحفظ','err');
-  }
-  msg('daysMsg','تم تسجيل اليوم ✅','ok');
-  loadDays();
-}
-async function delDay(id){
-  if(!confirm('حذف سجل هذا اليوم؟'))return;
-  const{error}=await db.from('attendance').delete().eq('id',id).eq('promoter_id',profile.id);
-  if(error)return msg('daysMsg','لا يمكن حذف يوم عليه مبيعات — احذف مبيعاته أولاً','err');
-  if(todaySession&&todaySession.id===id){todaySession=null;session=null;return promoterFlow()}
-  loadDays();
-}
-async function switchSession(attId){
-  const{data}=await db.from('attendance').select('*, touch_points(name,dual_shift)').eq('id',attId).single();
-  if(!data)return;
-  session=data;
-  openWork();
-}
 
-// ============ STAFF FLOW ============
-function showDash(t){
-  ['Over','Team','Plan','Admin'].forEach(x=>{
-    $('d'+x).classList.toggle('active',x.toLowerCase()===t);
-    $('pane'+x).classList.toggle('hidden',x.toLowerCase()!==t);
-  });
-  $('periodRow').classList.toggle('hidden',!(t==='over'||t==='team'));
-}
-let staffPeriod='today';
-function setPeriod(p){
-  staffPeriod=p;
-  ['Today','Week','Month'].forEach(x=>$('p'+x).classList.toggle('active',x.toLowerCase()===p));
-  loadStaffCounts();
-}
-function periodStart(){
-  const d=new Date();
-  if(staffPeriod==='today')return d.toISOString().slice(0,10);
-  if(staffPeriod==='week'){d.setDate(d.getDate()-6);return d.toISOString().slice(0,10)}
-  return d.toISOString().slice(0,7)+'-01';
-}
-async function staffFlow(){
-  $('staffName').textContent=profile.full_name;
-  $('staffRole').textContent=profile.role==='supervisor'?'المشرف 👨‍💼':'المدير 👔 (قراءة فقط)';
-  if(profile.role==='manager'){
-    const{data:tps}=await db.from('touch_points').select('city');
-    const cities=[...new Set((tps||[]).map(t=>t.city))];
-    $('citySelect').innerHTML=cities.map(c=>`<option value="${c}" ${c===profile.city?'selected':''}>${c}</option>`).join('');
-    $('cityWrap').classList.remove('hidden');
-  }
-  if(profile.role==='manager'){$('dPlan').style.display='none';$('dAdmin').style.display='none'}
-  show('staffCard');
-  showDash('over');
-  loadStaffCounts();
-}
-async function loadStaffCounts(){
-  const start=periodStart();
-  const city=profile.role==='manager'?$('citySelect').value:profile.city;
-  const[{count:scLas},{count:scAll}]=await Promise.all([
-    db.from('sell_operations').select('*, attendance!inner(touch_points!inner(city))',{count:'exact',head:true})
-      .eq('customer_type','LAS').gte('work_date',start).eq('attendance.touch_points.city',city),
-    db.from('sell_operations').select('*, attendance!inner(touch_points!inner(city))',{count:'exact',head:true})
-      .gte('work_date',start).eq('attendance.touch_points.city',city)
-  ]);
-  $('sLas').textContent=scLas??0;
-  $('sTotal').textContent=scAll??0;
-  loadDashLists(city,start);
-  loadTeamAnalytics(city);
-  if(profile.role==='supervisor'&&!window.tgLoaded){window.tgLoaded=true;loadTargetsEditor()}
-}
-async function loadFillWidget(city){
-  const m=curMonth(),elapsed=new Date().getDate();
-  const[{data:pros},{data:atts},{data:sales},{data:tgs}]=await Promise.all([
-    db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).eq('city',city),
-    db.from('attendance').select('promoter_id,work_date,shift,touch_point_id,status').gte('work_date',m+'-01'),
-    db.from('sell_operations').select('promoter_id,customer_type,work_date').gte('work_date',m+'-01'),
-    db.from('targets').select('touch_point_id,shift,daily_target').eq('month',m)
-  ]);
-  const tmap={};(tgs||[]).forEach(t=>tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target));
-  // days logged per promoter
-  const days={},tgt={};
-  (atts||[]).forEach(a=>{
-    (days[a.promoter_id]=days[a.promoter_id]||new Set()).add(a.work_date);
-    if(a.status==='work')tgt[a.promoter_id]=(tgt[a.promoter_id]||0)+(tmap[a.touch_point_id+'-'+a.shift]||0);
-  });
-  // LAS-only sales per promoter (only LAS counts toward target)
-  const las={};(sales||[]).forEach(s=>{if(s.customer_type==='LAS')las[s.promoter_id]=(las[s.promoter_id]||0)+1});
-  const rows=(pros||[]).map(p=>({
-    n:p.full_name,c:(days[p.id]||new Set()).size,
-    sales:las[p.id]||0,tg:Math.round((tgt[p.id]||0)*10)/10
-  })).sort((a,b)=>a.c-b.c);
-  $('fillWidget').innerHTML=rows.length?rows.map(r=>{
-    const full=r.c>=elapsed,pct=Math.round(r.c/elapsed*100);
-    const col=full?'var(--green)':r.c>=elapsed*0.7?'var(--gold)':'var(--red)';
-    const ach=r.tg>0?Math.round(r.sales/r.tg*100):null;
-    const acol=ach==null?'var(--muted)':ach>=100?'var(--green)':ach>=70?'var(--gold)':'var(--red)';
-    const apct=Math.min(100,ach||0);
-    const cell=(lbl,val,c,p)=>`<div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;margin-bottom:4px">
-        <span style="font-size:10px;color:var(--muted)">${lbl}</span>
-        <span dir="ltr" style="font-size:13px;font-weight:700;color:${c}">${val}</span>
-      </div>
-      <div class="bar" style="margin-top:0"><div style="width:${p}%;background:${c}"></div></div>
-    </div>`;
-    return `<div class="item" style="display:block;padding:12px 13px">
-      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
-        <span style="font-size:13px">${full?'✅':'⚠️'}</span>
-        <b style="font-size:13.5px;line-height:1.3">${r.n}</b>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        ${cell('أيام مسجلة',`${r.c}/${elapsed}`,col,pct)}
-        ${cell('هدف LAS',`${r.sales}/${r.tg}${ach!=null?` · ${ach}%`:''}`,acol,apct)}
-      </div>
-    </div>`;
-  }).join(''):'<div class="spin">لا مندوبين</div>';
-}
-async function loadDashLists(city,start){
-  loadFillWidget(city);
-  const{data:attRaw}=await db.from('attendance')
-    .select('id,shift,status,guided_trials,checked_in_at,work_date,users(full_name,city),touch_points(name,city)')
-    .gte('work_date',start).order('checked_in_at');
-  // left join + client filter: off/sick/leave days have no outlet, so scope them by the promoter's city
-  const att=(attRaw||[]).filter(a=>a.touch_points?a.touch_points.city===city:(a.users?a.users.city===city:false));
-  const gtTotal=(att||[]).reduce((a,x)=>a+(x.guided_trials||0),0);
-  $('sGT').textContent=gtTotal;
-  $('sAtt').textContent=(att||[]).length;
-  const canDelAtt=profile.role==='supervisor';
-  $('attList').innerHTML=(att&&att.length)?att.map(a=>`
-    <div class="sale-item"><div><b>${a.users.full_name}</b>
-      <div class="meta">${a.status==='work'?((a.touch_points.name.split('_')[1]||a.touch_points.name)+' · '+(a.shift==='day'?'نهاري ☀️':'ليلي 🌙')):STATUSES[a.status]} · ${a.work_date}</div>
-    </div><span style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;color:var(--muted)">GT: ${a.guided_trials}</span>${canDelAtt?`<button class="del" onclick="supDelAtt(${a.id})">🗑️</button>`:''}</span></div>`).join('')
-    :'<div class="spin">لا تسجيلات في الفترة</div>';
-  const{data:sales}=await db.from('sell_operations')
-    .select('sale_type,promoter_id,users(full_name),attendance!inner(touch_points!inner(name,city))')
-    .gte('work_date',start).eq('attendance.touch_points.city',city);
-  const by={},byOut={};
-  (sales||[]).forEach(s=>{
-    const n=s.users.full_name;
-    by[n]=by[n]||{las:0,lau:0,sk:0,mgm:0,ld:0};
-    const isLas=s.customer_type==='LAS';
-    if(isLas)by[n].las++;else by[n].lau++;
-    if(s.sale_type==='SK'||s.sale_type==='SK+MGM')by[n].sk++;
-    if(s.sale_type==='MGM'||s.sale_type==='SK+MGM')by[n].mgm++;
-    if(s.sale_type==='LD')by[n].ld++;
-    const o=s.attendance.touch_points.name;
-    byOut[o]=byOut[o]||{las:0,lau:0};
-    if(isLas)byOut[o].las++;else byOut[o].lau++;
-  });
-  const names=Object.keys(by).sort((a,b)=>by[b].las-by[a].las);
-  $('promoSales').innerHTML=names.length?names.map(n=>`
-    <div class="sale-item"><div><b>${n}</b>
-      <div class="meta">SK: ${by[n].sk} · MGM: ${by[n].mgm} · LD: ${by[n].ld}${by[n].lau?' · LAU: '+by[n].lau:''}</div>
-    </div><span style="font-size:18px;font-weight:800;color:var(--gold)">${by[n].las}<span style="font-size:10px;color:var(--muted)"> LAS</span></span></div>`).join('')
-    :'<div class="spin">لا مبيعات في الفترة</div>';
-  const outs=Object.keys(byOut).sort((a,b)=>byOut[b].las-byOut[a].las);
-  $('outletSales').innerHTML=outs.length?outs.map(o=>`
-    <div class="sale-item"><div><b>${o.split('_')[1]||o}</b>${byOut[o].lau?`<div class="meta">LAU: ${byOut[o].lau}</div>`:''}</div>
-    <span style="font-size:18px;font-weight:800;color:var(--gold)">${byOut[o].las}<span style="font-size:10px;color:var(--muted)"> LAS</span></span></div>`).join('')
-    :'<div class="spin">لا مبيعات في الفترة</div>';
-  const totalLas=names.reduce((a,n)=>a+by[n].las,0);
-  const totalLau=(sales||[]).length-totalLas;
-  window.dashData={by,byOut,las:totalLas,lau:totalLau,total:(sales||[]).length,gt:gtTotal,att:(att||[]).length,city,start};
-  loadStockView(city,start);
-  loadCheckView(city);
-  loadSalesFeed(city,start);
-  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager();$('routePlan').classList.remove('hidden');initRoutePlan()}
-}
-// team curve
-let teamChartObj=null;
-async function loadTeamAnalytics(city){
-  const m=curMonth();
-  const[{data:sales},{data:att},{data:tgs}]=await Promise.all([
-    db.from('sell_operations').select('work_date,attendance!inner(touch_points!inner(city))').eq('customer_type','LAS').gte('work_date',m+'-01').eq('attendance.touch_points.city',city),
-    db.from('attendance').select('work_date,shift,status,touch_point_id,touch_points!inner(city)').gte('work_date',m+'-01').eq('touch_points.city',city),
-    db.from('targets').select('touch_point_id,shift,daily_target').eq('month',m)
-  ]);
-  const tmap={};(tgs||[]).forEach(t=>tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target));
-  const salesBy={};(sales||[]).forEach(x=>salesBy[x.work_date]=(salesBy[x.work_date]||0)+1);
-  const attBy={};(att||[]).forEach(a=>{if(a.status==='work')attBy[a.work_date]=(attBy[a.work_date]||0)+(tmap[a.touch_point_id+'-'+a.shift]||0)});
-  const dNow=new Date().getDate();
-  const labels=[],cumS=[],cumT=[];let s=0,t=0;
-  for(let d=1;d<=dNow;d++){
-    const dt=m+'-'+String(d).padStart(2,'0');
-    s+=salesBy[dt]||0;t+=attBy[dt]||0;
-    labels.push(d);cumS.push(s);cumT.push(Math.round(t*100)/100);
-  }
-  if(teamChartObj)teamChartObj.destroy();
-  teamChartObj=drawCurve('teamChart',labels,cumS,cumT);
-}
-// CSV export (current month, city scope)
-async function exportCSV(){
-  const m=curMonth();
-  const city=profile.role==='manager'?$('citySelect').value:profile.city;
-  const{data}=await db.from('sell_operations')
-    .select('work_date,device_type,color,sale_type,customer_type,created_at,users(full_name),attendance!inner(shift,touch_points!inner(name,city))')
-    .gte('work_date',m+'-01').eq('attendance.touch_points.city',city).order('work_date');
-  const rows=[['Date','Promoter','Outlet','Shift','Device','Color','Sale Type','Customer','Entered At']];
-  (data||[]).forEach(s=>rows.push([
-    s.work_date,s.users.full_name,s.attendance.touch_points.name,s.attendance.shift,
-    s.device_type,s.color,s.sale_type,s.customer_type,new Date(s.created_at).toLocaleString('en-GB')
-  ]));
-  const csv='\ufeff'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-  a.download=`DaTracker_${city}_${m}.csv`;
-  a.click();
-}
-function genSummary(){
-  const d=window.dashData;if(!d)return;
-  const lbl=staffPeriod==='today'?'Daily':staffPeriod==='week'?'Weekly':'Monthly';
-  const lines=[`DaTracker — ${d.city} · ${lbl} Summary`,`${d.start} → ${todayStr()}`,''];
-  let sk=0,mgm=0,ld=0;Object.values(d.by).forEach(v=>{sk+=v.sk;mgm+=v.mgm;ld+=v.ld});
-  lines.push(`LAS sales : ${d.las}`);
-  lines.push(`Total activity : ${d.total} (LAU included: ${d.lau})`);
-  lines.push(`SK: ${sk} | MGM: ${mgm} | LD: ${ld}`);
-  lines.push(`Guided trials : ${d.gt}`);
-  lines.push(`Check-ins : ${d.att}`);
-  lines.push('');lines.push('By promoter (LAS):');
-  Object.keys(d.by).sort((a,b)=>d.by[b].las-d.by[a].las).forEach((n,i)=>lines.push(`${i+1}. ${n} — ${d.by[n].las}`));
-  lines.push('');lines.push('By outlet (LAS):');
-  Object.keys(d.byOut).sort((a,b)=>d.byOut[b].las-d.byOut[a].las).forEach((o,i)=>lines.push(`${i+1}. ${o.split('_')[1]||o} — ${d.byOut[o].las}`));
-  $('sumBox').value=lines.join('\n');
-  $('sumWrap').classList.remove('hidden');
-}
-async function loadStockView(city,start){
-  const{data}=await db.from('stock_reports')
-    .select('quantity,reported_at,stock_catalog(item_name),attendance!inner(shift,touch_points!inner(name,city))')
-    .gte('reported_at',start+'T00:00:00').eq('attendance.touch_points.city',city).order('reported_at',{ascending:false});
-  const byO={};
-  (data||[]).forEach(r=>{const o=r.attendance.touch_points.name;byO[o]=byO[o]||[];byO[o].push(r)});
-  const outs=Object.keys(byO);
-  $('stockView').innerHTML=outs.length?outs.map((o,i)=>`
-    <div class="sale-item" style="cursor:pointer" onclick="document.getElementById('stkd-${i}').classList.toggle('hidden')">
-      <div><b>${o.split('_')[1]||o}</b>
-        <div class="meta">${byO[o].length} صنف · آخر تحديث ${new Date(byO[o][0].reported_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>
-      </div><span style="color:var(--muted);font-size:12px">عرض ▾</span></div>
-    <div id="stkd-${i}" class="hidden" style="padding:4px 12px;font-size:12px;color:var(--muted)">
-      ${byO[o].map(r=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line-soft)"><span>${r.stock_catalog.item_name.replace('IQOS ILUMA i ','').replace('IQOS ','')}</span><b style="color:var(--text)">${r.quantity}</b></div>`).join('')}
-    </div>`).join('')
-    :'<div class="spin">لا جرد في الفترة</div>';
-}
-async function loadCheckView(city){
-  const[{data:items},{data:resp}]=await Promise.all([
-    db.from('checklist_items').select('id').eq('active',true),
-    db.from('checklist_responses').select('promoter_id,checked,users(full_name)').eq('work_date',todayStr())
-  ]);
-  const total=(items||[]).length;
-  const byP={};
-  (resp||[]).forEach(r=>{const n=r.users.full_name;byP[n]=byP[n]||0;if(r.checked)byP[n]++});
-  const names=Object.keys(byP);
-  $('checkView').innerHTML=names.length?names.map(n=>`
-    <div class="sale-item"><b>${n}</b>
-      <span style="font-weight:700;color:${byP[n]===total?'var(--green)':'var(--gold)'}">${byP[n]}/${total}</span>
-    </div>`).join('')
-    :'<div class="spin">لا استجابات اليوم</div>';
-}
-async function loadSalesFeed(city,start){
-  const{data}=await db.from('sell_operations')
-    .select('id,device_type,color,sale_type,customer_type,work_date,created_at,users(full_name),attendance!inner(touch_points!inner(name,city))')
-    .gte('work_date',start).eq('attendance.touch_points.city',city)
-    .order('created_at',{ascending:false}).limit(20);
-  const canDel=profile.role==='supervisor';
-  $('salesFeed').innerHTML=(data&&data.length)?data.map(s=>`
-    <div class="sale-item"><div><b>${s.users.full_name}</b> — ${DEV_SHORT[s.device_type]||s.device_type} ${s.color}
-      <div class="meta">${s.sale_type} · ${s.customer_type} · ${(s.attendance.touch_points.name.split('_')[1]||'')} · ${s.work_date}</div>
-    </div>${canDel?`<button class="del" onclick="supDelSale(${s.id})">🗑️</button>`:''}</div>`).join('')
-    :'<div class="spin">لا عمليات في الفترة</div>';
-}
-async function supDelSale(id){
-  if(!confirm('حذف هذه العملية نهائياً؟'))return;
-  await db.from('sell_operations').delete().eq('id',id);
-  loadStaffCounts();
-}
-let ntpDualVal=false;
-function ntpDual(v){ntpDualVal=v;$('ntpDual-no').classList.toggle('active',!v);$('ntpDual-yes').classList.toggle('active',v);$('ntpNightRow').classList.toggle('hidden',!v)}
-let ntpDsVal=false;
-function ntpDs(v){ntpDsVal=v;$('ntpDs-no').classList.toggle('active',!v);$('ntpDs-yes').classList.toggle('active',v)}
+  // ── Add / render / delete sales ──
+  function addSale() {
+    const device = currentDevice;
+    const color  = currentColor;
+    const state  = getState();
 
-// ---- ROUTE PLAN ----
-let rpOutlets=[],rpPromoters=[],rpInited=false;
-function initRoutePlan(){
-  if(rpInited)return;rpInited=true;
-  const d=new Date();d.setDate(d.getDate()+1);
-  $('rpDate').value=d.toISOString().slice(0,10);
-  loadRoutePlan();
-}
-async function loadRoutePlan(){
-  const dt=$('rpDate').value;
-  const[{data:tps},{data:pros},{data:plan}]=await Promise.all([
-    db.from('touch_points').select('*').eq('active',true).eq('city',profile.city).order('name'),
-    db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).order('full_name'),
-    db.from('route_plans').select('*').eq('plan_date',dt)
-  ]);
-  rpOutlets=tps||[];rpPromoters=pros||[];
-  const assigned={};(plan||[]).forEach(p=>assigned[p.touch_point_id+'-'+p.shift]=p.promoter_id);
-  const opts=sel=>'<option value="">— بدون —</option>'+rpPromoters.map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${p.full_name}</option>`).join('');
-  const row=(tp,sh,lbl)=>`<div class="stock-row"><span style="font-size:12.5px">${(tp.name.split('_')[1]||tp.name)} — ${lbl}</span>
-    <select id="rp-${tp.id}-${sh}" style="width:160px;font-size:13px;padding:8px">${opts(assigned[tp.id+'-'+sh])}</select></div>`;
-  $('rpSlots').innerHTML=rpOutlets.map(tp=>{
-    let r=row(tp,'day','نهاري ☀️');
-    if(tp.dual_shift)r+=row(tp,'night','ليلي 🌙');
-    return r;
-  }).join('')||'<div class="spin">لا مواقع نشطة</div>';
-}
-async function saveRoutePlan(){
-  $('rpBtn').disabled=true;
-  const dt=$('rpDate').value;
-  const rows=[];const used={};let dup=null;
-  rpOutlets.forEach(tp=>{
-    ['day','night'].forEach(sh=>{
-      const el=$('rp-'+tp.id+'-'+sh);
-      if(el&&el.value){
-        const key=el.value+'-'+sh;
-        if(used[key])dup=rpPromoters.find(p=>p.id===el.value);
-        used[key]=true;
-        rows.push({plan_date:dt,touch_point_id:tp.id,shift:sh,promoter_id:el.value,created_by:profile.id});
-      }
-    });
-  });
-  if(dup){$('rpBtn').disabled=false;return msg('rpMsg',`${dup.full_name.split(' ')[0]} معيّن على موقعين بنفس الفترة!`,'err')}
-  // replace the day's plan for my city outlets
-  const myTpIds=rpOutlets.map(t=>t.id);
-  await db.from('route_plans').delete().eq('plan_date',dt).in('touch_point_id',myTpIds);
-  if(rows.length){
-    const{error}=await db.from('route_plans').insert(rows);
-    if(error){$('rpBtn').disabled=false;return msg('rpMsg','خطأ في الحفظ','err')}
+    if (!device) { toast('Select a device'); return; }
+    if (!color)  { toast('Select a color'); return; }
+    if (!state)  { toast('Select customer state (LAS/LAU)'); return; }
+
+    const offers = [...document.querySelectorAll('#offers .pill.on')].map(p => p.dataset.v);
+
+    let devShort = device === 'ILUMA i PRIME' ? 'ILUMA i PRIME'
+                 : device === 'ILUMA i'       ? 'ILUMA i'
+                 :                              'ILUMA i ONE';
+
+    let offerStr = '';
+    if (offers.includes('SK') && offers.includes('MGM')) offerStr = 'SK + MGM';
+    else if (offers.includes('SK'))  offerStr = 'SK';
+    else if (offers.includes('MGM')) offerStr = 'MGM';
+    else if (offers.includes('LD'))  offerStr = 'L.D';
+
+    let line = `${devShort} ${color} - ${state}`;
+    if (offerStr) line += ` - ${offerStr}`;
+
+    sales.push(line);
+    renderSales();
+    resetSaleForm();
   }
-  $('rpBtn').disabled=false;
-  msg('rpMsg',`حُفظت خطة ${dt} (${rows.length} تعيين) ✅`,'ok');
-}
-function genRouteMsg(){
-  const dt=$('rpDate').value;
-  const[y,mo,dd]=dt.split('-');
-  const name2=id=>{const p=rpPromoters.find(x=>x.id===id);return p?p.full_name:'؟'};
-  const norm=[],ds=[];const activeIds=new Set();const dsActiveIds=new Set();
-  rpOutlets.forEach(tp=>{
-    const dEl=$('rp-'+tp.id+'-day'),nEl=$('rp-'+tp.id+'-night');
-    const dv=dEl&&dEl.value?dEl.value:null;
-    const nv=nEl&&nEl.value?nEl.value:null;
-    if(!dv&&!nv)return;
-    if(tp.is_ds){
-      // DS block: unicode + name + url + shifts, tallied separately
-      if(dv)dsActiveIds.add(dv);
-      if(nv)dsActiveIds.add(nv);
-      const b=[];
-      if(tp.unicode)b.push(tp.unicode);
-      b.push(tp.name);
-      if(tp.maps_url){b.push('');b.push(tp.maps_url)}
-      if(dv){b.push('');b.push('Day : '+name2(dv))}
-      if(nv)b.push('Night : '+name2(nv));
-      ds.push(b.join('\n'));
-    }else{
-      if(dv)activeIds.add(dv);
-      if(nv)activeIds.add(nv);
-      const b=[];
-      if(tp.unicode)b.push(tp.unicode);
-      b.push(tp.name);
-      if(tp.maps_url){b.push('');b.push(tp.maps_url)}
-      if(dv){b.push('');b.push('Day : '+name2(dv))}
-      if(nv)b.push('Night : '+name2(nv));
-      norm.push(b.join('\n'));
+
+  function renderSales() {
+    const list = document.getElementById('sales-list');
+    document.getElementById('cnt').textContent = sales.length;
+
+    if (sales.length === 0) {
+      list.innerHTML = '<div class="empty">No entries yet</div>';
+      return;
     }
-  });
-  if(!norm.length&&!ds.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
-  const allActive=new Set([...activeIds,...dsActiveIds]);
-  const absent=rpPromoters.filter(p=>!allActive.has(p.id));
-  const lines=[profile.city,`${dd}/${mo}/${y}`,''];
-  lines.push(norm.join('\n\n🟰🟰🟰🟰🟰🟰\n\n'));
-  lines.push('');
-  lines.push(`Total active : ${activeIds.size}`);
-  if(absent.length){
-    lines.push('');
-    lines.push('Absent:');
-    absent.forEach(p=>lines.push(`${p.full_name} ::: أوف`));
-  }
-  if(ds.length){
-    lines.push('');
-    lines.push('====DS====');
-    lines.push('');
-    lines.push(ds.join('\n\n'));
-    lines.push('');
-    lines.push(`Total active : ${dsActiveIds.size}`);
-    lines.push('off :');
-  }
-  $('rpBox').value=lines.join('\n');
-  $('rpMsgWrap').classList.remove('hidden');
-}
-async function supDelAtt(id){
-  if(!confirm('حذف هذا التسجيل نهائياً؟ (يُرفض إذا كانت عليه مبيعات)'))return;
-  const{error}=await db.from('attendance').delete().eq('id',id);
-  if(error)return alert('لا يمكن الحذف — عليه مبيعات مسجلة. احذف مبيعاته من آخر العمليات أولاً.');
-  loadStaffCounts();
-}
-let tpCache=[];
-async function loadTpManager(){
-  const{data}=await db.from('touch_points').select('*').eq('city',profile.city).order('active',{ascending:false}).order('name');
-  tpCache=data||[];
-  $('tpList').innerHTML=tpCache.map(tp=>`
-    <div class="sale-item" style="display:block;${tp.active?'':'opacity:.45'}">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div><b>${tp.name.split('_')[1]||tp.name}</b>
-          <div class="meta">${tp.unicode?tp.unicode+' · ':''}${tp.dual_shift?'دوامين ☀️🌙':'نهاري ☀️'}${tp.is_ds?' · 🏷️DS':''}${tp.maps_url?' · 📍':''} · ${tp.active?'نشط':'موقوف'}</div>
-        </div>
-        <span style="display:flex;gap:6px">
-          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="editTp(${tp.id})">✏️</button>
-          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none" onclick="toggleTp(${tp.id},${!tp.active})">${tp.active?'إيقاف':'تفعيل'}</button>
-        </span>
-      </div>
-      <div id="ed-${tp.id}" class="hidden" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)">
-        <input type="text" id="ed-name-${tp.id}" value="${tp.name.replace(/"/g,'&quot;')}" style="text-align:right;letter-spacing:0;font-size:13px" placeholder="الاسم">
-        <input type="text" id="ed-code-${tp.id}" value="${tp.unicode||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="Unicode">
-        <input type="text" id="ed-maps-${tp.id}" value="${tp.maps_url||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="رابط الخريطة">
-        <div class="shift-row" style="margin-top:6px">
-          <div class="opt-btn ${tp.dual_shift?'active':''}" id="ed-dual-${tp.id}" onclick="this.classList.toggle('active')">دوامين</div>
-        </div>
-        <button style="margin-top:8px" onclick="saveTpEdit(${tp.id})">حفظ التعديل ✅</button>
-      </div>
-    </div>`).join('')||'<div class="spin">لا مواقع</div>';
-}
-function editTp(id){$('ed-'+id).classList.toggle('hidden')}
-async function saveTpEdit(id){
-  const name=$('ed-name-'+id).value.trim();
-  if(!name)return msg('tpMsg','الاسم مطلوب','err');
-  const{error}=await db.from('touch_points').update({
-    name,unicode:$('ed-code-'+id).value.trim()||null,maps_url:$('ed-maps-'+id).value.trim()||null,
-    dual_shift:$('ed-dual-'+id).classList.contains('active')
-  }).eq('id',id);
-  if(error)return msg('tpMsg',error.code==='23505'?'الاسم مستخدم':'خطأ في التعديل','err');
-  msg('tpMsg','تم تعديل الموقع ✅','ok');
-  loadTpManager();window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;rpInited=false;
-}
-async function addTp(){
-  const n=$('ntpName').value.trim();
-  const m=$('ntpMaps').value.trim();
-  const code=$('ntpCode').value.trim();
-  if(!n)return msg('tpMsg','اكتب اسم الموقع','err');
-  const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,dual_shift:ntpDualVal,is_ds:ntpDsVal,city:profile.city}).select().single();
-  if(error){
-    if(error.code==='23505')return msg('tpMsg','الاسم مستخدم مسبقاً — الأسماء فريدة','err');
-    return msg('tpMsg','خطأ: '+(error.message||'غير معروف')+(String(error.message).includes('unicode')?' — شغّل patch v8 أولاً!':''),'err');
-  }
-  // targets in same action (if provided)
-  const tgRows=[];
-  const td=parseFloat($('ntpTgDay').value),gd=parseFloat($('ntpGtDay').value);
-  if(!isNaN(td))tgRows.push({touch_point_id:newTp.id,shift:'day',daily_target:td,gt_target:isNaN(gd)?0:gd,month:curMonth()});
-  if(ntpDualVal){
-    const tn=parseFloat($('ntpTgNight').value),gn=parseFloat($('ntpGtNight').value);
-    if(!isNaN(tn))tgRows.push({touch_point_id:newTp.id,shift:'night',daily_target:tn,gt_target:isNaN(gn)?0:gn,month:curMonth()});
-  }
-  if(tgRows.length)await db.from('targets').insert(tgRows);
-  ['ntpName','ntpMaps','ntpCode','ntpTgDay','ntpGtDay','ntpTgNight','ntpGtNight'].forEach(i=>$(i).value='');
-  ntpDual(false);ntpDs(false);
-  msg('tpMsg',`أُضيف الموقع ✅${tgRows.length?' مع أهدافه 🎯':' — حدد هدفه لاحقاً'}`,'ok');
-  loadTpManager();
-  window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;
-  rpInited=false;
-}
-async function toggleTp(id,active){
-  await db.from('touch_points').update({active}).eq('id',id);
-  loadTpManager();
-  window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;
-}
-async function loadClManager(){
-  const{data}=await db.from('checklist_items').select('*').eq('active',true).order('sort_order');
-  $('clItems').innerHTML=(data||[]).map(it=>`
-    <div class="sale-item"><span style="font-size:13px">${it.title}</span>
-      <button class="del" onclick="delClItem(${it.id})">✖</button>
-    </div>`).join('')||'<div class="spin">لا بنود</div>';
-}
-async function addClItem(){
-  const t=$('newClItem').value.trim();
-  if(!t)return msg('clMsg','اكتب البند أولاً','err');
-  const{error}=await db.from('checklist_items').insert({title:t,created_by:profile.id});
-  if(error)return msg('clMsg','خطأ في الإضافة','err');
-  $('newClItem').value='';
-  msg('clMsg','تمت الإضافة ✅','ok');
-  loadClManager();
-}
-async function delClItem(id){
-  if(!confirm('إيقاف هذا البند؟'))return;
-  await db.from('checklist_items').update({active:false}).eq('id',id);
-  loadClManager();
-}
-let tgOutlets=[];
-async function loadTargetsEditor(){
-  $('targetsSection').classList.remove('hidden');
-  $('tgMonth').textContent=curMonthName();
-  const[{data:tps},{data:tgs}]=await Promise.all([
-    db.from('touch_points').select('*').eq('active',true).eq('city',profile.city).order('name'),
-    db.from('targets').select('*').eq('month',curMonth())
-  ]);
-  tgOutlets=tps||[];
-  const tmap={},gmap={};(tgs||[]).forEach(t=>{tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target);gmap[t.touch_point_id+'-'+t.shift]=Number(t.gt_target)});
-  const row=(tp,sh,lbl)=>`<div class="stock-row"><span>${(tp.name.split('_')[1]||tp.name)} — ${lbl}</span>
-    <span style="display:flex;gap:6px">
-      <input type="text" inputmode="decimal" id="tg-${tp.id}-${sh}" value="${tmap[tp.id+'-'+sh]??''}" placeholder="مبيعات" style="width:72px">
-      <input type="text" inputmode="decimal" id="gt-${tp.id}-${sh}" value="${gmap[tp.id+'-'+sh]??''}" placeholder="GT" style="width:60px">
-    </span></div>`;
-  $('targetsList').innerHTML='<div class="stock-row" style="border:none"><span style="color:var(--muted);font-size:11px">الموقع</span><span style="display:flex;gap:6px;color:var(--muted);font-size:11px"><span style="width:72px;text-align:center">هدف مبيعات</span><span style="width:60px;text-align:center">هدف GT</span></span></div>'+
-    tgOutlets.map(tp=>{
-      let rows=row(tp,'day','نهاري');
-      if(tp.dual_shift)rows+=row(tp,'night','ليلي');
-      return rows;
-    }).join('');
-}
-async function saveTargets(){
-  $('tgBtn').disabled=true;
-  const rows=[];
-  tgOutlets.forEach(tp=>{
-    ['day','night'].forEach(sh=>{
-      const el=$('tg-'+tp.id+'-'+sh);
-      const gel=$('gt-'+tp.id+'-'+sh);
-      if(el&&el.value.trim()!=='')rows.push({touch_point_id:tp.id,shift:sh,daily_target:parseFloat(el.value)||0,gt_target:gel&&gel.value.trim()!==''?parseFloat(gel.value)||0:0,month:curMonth()});
-    });
-  });
-  const{error}=await db.from('targets').upsert(rows,{onConflict:'touch_point_id,shift,month'});
-  $('tgBtn').disabled=false;
-  if(error)return msg('tgMsg','خطأ في الحفظ','err');
-  msg('tgMsg',`تم حفظ أهداف الشهر (${rows.length}) 🎯`,'ok');
-}
 
-// Enter keys + session restore
-$('last4').addEventListener('keydown',e=>{if(e.key==='Enter')$('pin').focus()});
-$('pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
-db.auth.getSession().then(({data:{session:s}})=>{if(s)route()});
+    list.innerHTML = sales.map((s, i) => `
+      <div class="sale-card">
+        <span class="sale-num">${i+1}</span>
+        <span class="sale-text">${s}</span>
+        <button class="delete-btn" onclick="deleteSale(${i})" title="Remove">✕</button>
+      </div>
+    `).join('');
+  }
+
+  function deleteSale(i) {
+    sales.splice(i, 1);
+    renderSales();
+  }
+
+  function resetSaleForm() {
+    currentColor = '';
+    document.querySelectorAll('#color-grp .swatch').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('#seg-state .seg-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#offers .pill').forEach(p => p.classList.remove('on','disabled'));
+  }
+
+  // ── Generate → editable review form ──
+  function genReport() {
+    const outlet = document.getElementById('sel-outlet').value;
+    const date   = document.getElementById('inp-date').value.trim();
+    const shiftEl = document.querySelector('#seg-shift .seg-btn.active');
+    const shift  = shiftEl ? shiftEl.textContent.trim() : '';
+    const gt     = document.getElementById('inp-gt').value || '0';
+
+    if (!outlet) { toast('Select an outlet'); return; }
+    if (!date)   { toast('Enter the date'); return; }
+    if (!shift)  { toast('Select Day or Night shift'); return; }
+
+    document.getElementById('ed-outlet').value = outlet;
+    document.getElementById('ed-date').value   = date;
+    document.getElementById('ed-shift').value  = `${shift} Shift`;
+    document.getElementById('ed-total').value  = sales.length;
+    document.getElementById('ed-gt').value     = gt;
+
+    const wrap = document.getElementById('ed-sales-wrap');
+    if (sales.length === 0) {
+      wrap.innerHTML = '<input type="text" class="ed-sale" value="No sales this session."/>';
+    } else {
+      wrap.innerHTML = sales.map((s,i) =>
+        `<input type="text" class="ed-sale" value="${i+1}. ${s}"/>`).join('');
+    }
+
+    const sec = document.getElementById('out-sec');
+    sec.style.display = 'block';
+    document.getElementById('btn-copy').textContent = 'Copy to Clipboard';
+    document.getElementById('btn-copy').classList.remove('done');
+    setTimeout(() => sec.scrollIntoView({ behavior:'smooth', block:'start' }), 60);
+  }
+
+  // ── Copy final (edited) report ──
+  function copyReport() {
+    const outlet = document.getElementById('ed-outlet').value.trim();
+    const date   = document.getElementById('ed-date').value.trim();
+    const shift  = document.getElementById('ed-shift').value.trim();
+    const total  = document.getElementById('ed-total').value.trim();
+    const gt     = document.getElementById('ed-gt').value.trim();
+    const saleLines = [...document.querySelectorAll('.ed-sale')].map(i => i.value.trim()).filter(Boolean);
+
+    const lines = [
+      `*${outlet}*`,
+      `*(${date})*`,
+      `*${shift}*`,
+      `______________________`,
+      ...saleLines,
+      `______________________`,
+      `Total sales : ${total}`,
+      `Guided trials : ${gt}`,
+    ];
+
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      const btn = document.getElementById('btn-copy');
+      btn.textContent = '✓ Copied!';
+      btn.classList.add('done');
+      setTimeout(() => { btn.textContent = 'Copy to Clipboard'; btn.classList.remove('done'); }, 2500);
+    });
+  }
+
+  // ── Toast ──
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1800);
+  }
 </script>
 </body>
 </html>

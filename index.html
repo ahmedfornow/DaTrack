@@ -1272,6 +1272,7 @@ let rpOutlets=[],rpPromoters=[],rpInited=false;
 // plan statuses (stored in route_plans.status) — separate from attendance statuses
 const PLAN_STATUS={off:'أوف',sick:'مرضية',annual:'إجازة سنوية',absent:'غياب'};
 const PLAN_STATUS_UI={off:'أوف 🌴',sick:'مرضية 🤒',annual:'إجازة سنوية 🏖️',absent:'غياب 🚫'};
+const PLAN_STATUS_EN={off:'Off',sick:'Sick leave',annual:'Annual leave',absent:'Absent'};
 function initRoutePlan(){
   if(rpInited)return;rpInited=true;
   const d=bizNow();d.setUTCDate(d.getUTCDate()+1);
@@ -1357,7 +1358,10 @@ async function saveRoutePlan(){
 function genRouteMsg(){
   const dt=$('rpDate').value;
   const parts=dt.split('-'),y=parts[0],mo=parts[1],dd=parts[2];
-  const name2=id=>{const p=rpPromoters.find(x=>String(x.id)===String(id));return p?p.full_name:'؟'};
+  const DAY_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayName=DAY_EN[new Date(dt+'T12:00:00').getDay()];
+  const name2=id=>{const p=rpPromoters.find(x=>String(x.id)===String(id));return p?p.full_name:'?'};
+  const short=tp=>(tp.name.split('_')[1]||tp.name).trim();
   const picks=rpPicks();
   // group promoters under their outlet + shift
   const byTp={};
@@ -1366,46 +1370,58 @@ function genRouteMsg(){
     byTp[a.tp]=byTp[a.tp]||{day:[],night:[]};
     byTp[a.tp][a.shift].push(name2(pid));
   });
-  const norm=[],ds=[];const activeIds=new Set(),dsActiveIds=new Set();
-  rpOutlets.forEach(tp=>{
-    const g=byTp[tp.id];
-    if(!g||(!g.day.length&&!g.night.length))return;
-    const b=[];
-    if(tp.unicode)b.push(tp.unicode);
-    b.push(tp.name);
-    if(tp.maps_url){b.push('');b.push(tp.maps_url)}
-    if(g.day.length){b.push('');b.push('Day : '+g.day.join(' / '))}
-    if(g.night.length)b.push('Night : '+g.night.join(' / '));
-    (tp.is_ds?ds:norm).push(b.join('\n'));
-  });
+  const activeIds=new Set(),dsActiveIds=new Set();
   Object.keys(picks).forEach(pid=>{
     const a=picks[pid];if(!a.tp)return;
     const tp=rpOutlets.find(t=>t.id===a.tp);
     (tp&&tp.is_ds?dsActiveIds:activeIds).add(String(pid));
   });
+  const block=(tp,i)=>{
+    const g=byTp[tp.id];
+    const b=['*'+i+'. '+short(tp)+'*'];
+    if(tp.unicode)b.push('🔢 '+tp.unicode);
+    b.push('🏷 '+tp.name);
+    if(g.day.length)b.push('☀️ Day   : '+g.day.join(' / '));
+    if(g.night.length)b.push('🌙 Night : '+g.night.join(' / '));
+    if(tp.maps_url)b.push('🗺 '+tp.maps_url);
+    return b.join('\n');
+  };
+  const norm=[],ds=[];
+  rpOutlets.forEach(tp=>{
+    const g=byTp[tp.id];
+    if(!g||(!g.day.length&&!g.night.length))return;
+    (tp.is_ds?ds:norm).push(tp);
+  });
   if(!norm.length&&!ds.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
-  // everyone not on an outlet: explicit status, or أوف by default
-  const offList=rpPromoters.filter(p=>!picks[p.id]||picks[p.id].status)
-    .map(p=>({n:p.full_name,s:picks[p.id]&&picks[p.id].status?PLAN_STATUS[picks[p.id].status]:'أوف'}));
-  const lines=[profile.city,`${dd}/${mo}/${y}`,''];
-  lines.push(norm.join('\n\n🟰🟰🟰🟰🟰🟰\n\n'));
-  lines.push('');
-  lines.push(`Total active : ${activeIds.size}`);
-  if(offList.length){
-    lines.push('');
-    lines.push('Absent:');
-    offList.forEach(o=>lines.push(`${o.n} ::: ${o.s}`));
+  const SEP='━━━━━━━━━━━━━━━';
+  const L=[];
+  L.push('*'+String(profile.city).toUpperCase()+' — ROUTE PLAN*');
+  L.push('🗓 '+dayName+' · '+dd+'/'+mo+'/'+y);
+  L.push(SEP);
+  if(norm.length){
+    L.push('');
+    norm.forEach((tp,k)=>{L.push(block(tp,k+1));L.push('')});
   }
   if(ds.length){
-    lines.push('');
-    lines.push('====DS====');
-    lines.push('');
-    lines.push(ds.join('\n\n'));
-    lines.push('');
-    lines.push(`Total active : ${dsActiveIds.size}`);
-    lines.push('off :');
+    L.push(SEP);
+    L.push('*DIRECT SALES — DS*');
+    L.push('');
+    ds.forEach((tp,k)=>{L.push(block(tp,k+1));L.push('')});
   }
-  $('rpBox').value=lines.join('\n');
+  // everyone not on an outlet: explicit status, or Off by default
+  const offList=rpPromoters.filter(p=>!picks[p.id]||picks[p.id].status)
+    .map(p=>({n:p.full_name,s:picks[p.id]&&picks[p.id].status?PLAN_STATUS_EN[picks[p.id].status]:'Off'}));
+  L.push(SEP);
+  const tally=['✅ Active : '+activeIds.size];
+  if(ds.length)tally.push('🏷 DS : '+dsActiveIds.size);
+  tally.push('🌴 Off : '+offList.length);
+  L.push(tally.join('   ·   '));
+  if(offList.length){
+    L.push('');
+    L.push('*OFF / LEAVE*');
+    offList.forEach(o=>L.push('• '+o.n+' — '+o.s));
+  }
+  $('rpBox').value=L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
   $('rpMsgWrap').classList.remove('hidden');
 }
 async function supDelAtt(id){

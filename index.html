@@ -1373,8 +1373,16 @@ async function supDelAtt(id){
 }
 let tpCache=[];
 async function loadTpManager(){
-  const{data}=await db.from('touch_points').select('*').eq('city',profile.city).order('active',{ascending:false}).order('name');
+  const[{data},{data:tgs}]=await Promise.all([
+    db.from('touch_points').select('*').eq('city',profile.city).order('active',{ascending:false}).order('name'),
+    db.from('targets').select('touch_point_id,shift,daily_target,gt_target').eq('month',curMonth())
+  ]);
   tpCache=data||[];
+  const tmap={},gmap={};
+  (tgs||[]).forEach(t=>{tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target);gmap[t.touch_point_id+'-'+t.shift]=Number(t.gt_target)});
+  const tv=(id,sh)=>tmap[id+'-'+sh]??'';
+  const gv=(id,sh)=>gmap[id+'-'+sh]??'';
+  const esc=s=>String(s??'').replace(/"/g,'&quot;');
   $('tpList').innerHTML=tpCache.map(tp=>`
     <div class="sale-item" style="display:block;${tp.active?'':'opacity:.45'}">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1387,31 +1395,84 @@ async function loadTpManager(){
         </span>
       </div>
       <div id="ed-${tp.id}" class="hidden" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)">
-        <input type="text" id="ed-name-${tp.id}" value="${tp.name.replace(/"/g,'&quot;')}" style="text-align:right;letter-spacing:0;font-size:13px" placeholder="الاسم">
-        <input type="text" id="ed-code-${tp.id}" value="${tp.unicode||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="Unicode">
-        <input type="text" id="ed-maps-${tp.id}" value="${tp.maps_url||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="رابط الخريطة">
-        <div class="shift-row" style="margin-top:6px">
+        <label style="margin:4px 0 4px">اسم الموقع</label>
+        <input type="text" id="ed-name-${tp.id}" value="${esc(tp.name)}" style="text-align:right;letter-spacing:0;font-size:13px" placeholder="الاسم">
+        <label style="margin:10px 0 4px">Unicode / كود الموقع</label>
+        <input type="text" id="ed-code-${tp.id}" value="${esc(tp.unicode)}" style="text-align:left;direction:ltr;font-size:13px" placeholder="Unicode">
+        <label style="margin:10px 0 4px">رابط الخريطة</label>
+        <input type="text" id="ed-maps-${tp.id}" value="${esc(tp.maps_url)}" style="text-align:left;direction:ltr;font-size:13px" placeholder="https://...">
+        <label style="margin:10px 0 4px">فترات الموقع</label>
+        <div class="shift-row">
           <div class="opt-btn ${tpMode(tp)==='day'?'active':''}" id="ed-mode-day-${tp.id}" onclick="edMode(${tp.id},'day')">نهاري ☀️</div>
           <div class="opt-btn ${tpMode(tp)==='night'?'active':''}" id="ed-mode-night-${tp.id}" onclick="edMode(${tp.id},'night')">ليلي 🌙</div>
           <div class="opt-btn ${tpMode(tp)==='dual'?'active':''}" id="ed-mode-dual-${tp.id}" onclick="edMode(${tp.id},'dual')">دوامين</div>
         </div>
-        <button style="margin-top:8px" onclick="saveTpEdit(${tp.id})">حفظ التعديل ✅</button>
+        <label style="margin:10px 0 4px">نوع الموقع</label>
+        <div class="shift-row">
+          <div class="opt-btn ${tp.is_ds?'':'active'}" id="ed-ds-no-${tp.id}" onclick="edDs(${tp.id},false)">عادي</div>
+          <div class="opt-btn ${tp.is_ds?'active':''}" id="ed-ds-yes-${tp.id}" onclick="edDs(${tp.id},true)">Direct Sales</div>
+        </div>
+        <label style="margin:10px 0 4px">هدف ${curMonthName()}</label>
+        <div class="shift-row" id="ed-dayrow-${tp.id}">
+          <input type="text" inputmode="decimal" id="ed-tgd-${tp.id}" value="${tv(tp.id,'day')}" placeholder="مبيعات نهاري" style="font-size:13px">
+          <input type="text" inputmode="decimal" id="ed-gtd-${tp.id}" value="${gv(tp.id,'day')}" placeholder="GT نهاري" style="font-size:13px">
+        </div>
+        <div class="shift-row" id="ed-nightrow-${tp.id}" style="margin-top:6px">
+          <input type="text" inputmode="decimal" id="ed-tgn-${tp.id}" value="${tv(tp.id,'night')}" placeholder="مبيعات ليلي" style="font-size:13px">
+          <input type="text" inputmode="decimal" id="ed-gtn-${tp.id}" value="${gv(tp.id,'night')}" placeholder="GT ليلي" style="font-size:13px">
+        </div>
+        <button style="margin-top:10px" onclick="saveTpEdit(${tp.id})">حفظ التعديل ✅</button>
       </div>
     </div>`).join('')||'<div class="spin">لا مواقع</div>';
+  tpCache.forEach(tp=>edRows(tp.id,tpMode(tp)));
 }
-let edModeVal={};
-function edMode(id,v){edModeVal[id]=v;['day','night','dual'].forEach(x=>$('ed-mode-'+x+'-'+id).classList.toggle('active',x===v))}
+let edModeVal={},edDsVal={};
+function edMode(id,v){
+  edModeVal[id]=v;
+  ['day','night','dual'].forEach(x=>$('ed-mode-'+x+'-'+id).classList.toggle('active',x===v));
+  edRows(id,v);
+}
+function edDs(id,v){
+  edDsVal[id]=v;
+  $('ed-ds-no-'+id).classList.toggle('active',!v);
+  $('ed-ds-yes-'+id).classList.toggle('active',v);
+}
+function edRows(id,mode){
+  const dr=$('ed-dayrow-'+id),nr=$('ed-nightrow-'+id);
+  if(dr)dr.style.display=mode==='night'?'none':'flex';
+  if(nr)nr.style.display=mode==='day'?'none':'flex';
+}
 function editTp(id){$('ed-'+id).classList.toggle('hidden')}
 async function saveTpEdit(id){
+  const cur=tpCache.find(x=>x.id===id)||{};
   const name=$('ed-name-'+id).value.trim();
   if(!name)return msg('tpMsg','الاسم مطلوب','err');
+  const mode=edModeVal[id]||tpMode(cur);
+  const isDs=edDsVal[id]!==undefined?edDsVal[id]:!!cur.is_ds;
   const{error}=await db.from('touch_points').update({
-    name,unicode:$('ed-code-'+id).value.trim()||null,maps_url:$('ed-maps-'+id).value.trim()||null,
-    shift_mode:edModeVal[id]||tpMode(tpCache.find(x=>x.id===id)),
-    dual_shift:(edModeVal[id]||tpMode(tpCache.find(x=>x.id===id)))==='dual' 
+    name,
+    unicode:$('ed-code-'+id).value.trim()||null,
+    maps_url:$('ed-maps-'+id).value.trim()||null,
+    shift_mode:mode,
+    dual_shift:mode==='dual',
+    is_ds:isDs
   }).eq('id',id);
   if(error)return msg('tpMsg',error.code==='23505'?'الاسم مستخدم':'خطأ في التعديل','err');
-  msg('tpMsg','تم تعديل الموقع ✅','ok');
+  // targets for this month, only for the shifts this outlet actually runs
+  const tgRows=[];
+  const pair=(sh,tEl,gEl)=>{
+    const tv=$(tEl+id).value.trim(),gvv=$(gEl+id).value.trim();
+    if(tv===''&&gvv==='')return;
+    tgRows.push({touch_point_id:id,shift:sh,daily_target:parseFloat(tv)||0,gt_target:parseFloat(gvv)||0,month:curMonth()});
+  };
+  const shifts=tpShifts({shift_mode:mode});
+  if(shifts.includes('day'))pair('day','ed-tgd-','ed-gtd-');
+  if(shifts.includes('night'))pair('night','ed-tgn-','ed-gtn-');
+  if(tgRows.length){
+    const{error:te}=await db.from('targets').upsert(tgRows,{onConflict:'touch_point_id,shift,month'});
+    if(te)return msg('tpMsg','حُفظ الموقع لكن فشل حفظ الهدف','err');
+  }
+  msg('tpMsg',`تم تعديل الموقع ✅${tgRows.length?' مع الهدف 🎯':''}`,'ok');
   loadTpManager();window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;rpInited=false;
 }
 async function addTp(){

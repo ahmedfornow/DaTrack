@@ -536,12 +536,19 @@ async function setSigninDate(dt){
   window.takenShifts=taken;
   updateShiftUI();
   // pre-fill from that day's route plan
-  const{data:plan}=await db.from('route_plans').select('touch_point_id,shift').eq('plan_date',dt).eq('promoter_id',profile.id).limit(1);
+  const{data:plan}=await db.from('route_plans').select('touch_point_id,shift,status').eq('plan_date',dt).eq('promoter_id',profile.id).limit(1);
   if(plan&&plan.length){
-    $('tpSelect').value=plan[0].touch_point_id;
-    updateShiftUI();
-    if(plan[0].shift==='night')pickShift('night');
-    msg('signinMsg',`خطتك جاهزة من المشرف 🗺️ ${SHIFT_AR[plan[0].shift]||''}`,'ok');
+    const pl=plan[0];
+    if(pl.touch_point_id){
+      $('tpSelect').value=pl.touch_point_id;
+      updateShiftUI();
+      if(pl.shift==='night')pickShift('night');
+      msg('signinMsg',`خطتك جاهزة من المشرف 🗺️ ${SHIFT_AR[pl.shift]||''}`,'ok');
+    }else if(pl.status){
+      // leave day in the plan — preselect the matching attendance status when one exists
+      if(STATUSES[pl.status])pickStatus(pl.status);
+      msg('signinMsg',`المشرف مسجّلك اليوم: ${PLAN_STATUS[pl.status]||pl.status}`,'ok');
+    }
   }
 }
 function openDaySession(){
@@ -1262,6 +1269,9 @@ function ntpDs(v){ntpDsVal=v;$('ntpDs-no').classList.toggle('active',!v);$('ntpD
 
 // ---- ROUTE PLAN ----
 let rpOutlets=[],rpPromoters=[],rpInited=false;
+// plan statuses (stored in route_plans.status) — separate from attendance statuses
+const PLAN_STATUS={off:'أوف',sick:'مرضية',annual:'إجازة سنوية',absent:'غياب'};
+const PLAN_STATUS_UI={off:'أوف 🌴',sick:'مرضية 🤒',annual:'إجازة سنوية 🏖️',absent:'غياب 🚫'};
 function initRoutePlan(){
   if(rpInited)return;rpInited=true;
   const d=bizNow();d.setUTCDate(d.getUTCDate()+1);
@@ -1276,82 +1286,115 @@ async function loadRoutePlan(){
     db.from('route_plans').select('*').eq('plan_date',dt)
   ]);
   rpOutlets=tps||[];rpPromoters=pros||[];
-  const assigned={};(plan||[]).forEach(p=>assigned[p.touch_point_id+'-'+p.shift]=p.promoter_id);
-  const opts=sel=>'<option value="">— بدون —</option>'+rpPromoters.map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${p.full_name}</option>`).join('');
-  const row=(tp,sh,lbl)=>`<div class="stock-row"><span style="font-size:12.5px">${(tp.name.split('_')[1]||tp.name)} — ${lbl}</span>
-    <select id="rp-${tp.id}-${sh}" style="width:160px;font-size:13px;padding:8px">${opts(assigned[tp.id+'-'+sh])}</select></div>`;
-  $('rpSlots').innerHTML=rpOutlets.map(tp=>tpShifts(tp).map(sh=>row(tp,sh,SHIFT_AR[sh])).join('')).join('')||'<div class="spin">لا مواقع نشطة</div>';
+  // one assignment per promoter per day
+  const cur={};
+  (plan||[]).forEach(r=>{
+    cur[r.promoter_id]=r.status?('st:'+r.status):('tp:'+r.touch_point_id+':'+r.shift);
+  });
+  const short=tp=>tp.name.split('_')[1]||tp.name;
+  const opts=sel=>{
+    let h='<option value="">— بدون —</option>';
+    h+='<optgroup label="الحالة">';
+    Object.keys(PLAN_STATUS_UI).forEach(k=>{
+      const v='st:'+k;
+      h+=`<option value="${v}" ${v===sel?'selected':''}>${PLAN_STATUS_UI[k]}</option>`;
+    });
+    h+='</optgroup><optgroup label="المواقع">';
+    rpOutlets.forEach(tp=>tpShifts(tp).forEach(sh=>{
+      const v='tp:'+tp.id+':'+sh;
+      h+=`<option value="${v}" ${v===sel?'selected':''}>${short(tp)} — ${SHIFT_AR[sh]}</option>`;
+    }));
+    h+='</optgroup>';
+    return h;
+  };
+  $('rpSlots').innerHTML=rpPromoters.length?rpPromoters.map(pr=>`
+    <div class="stock-row">
+      <span style="font-size:12.5px;flex:1;min-width:0">${pr.full_name}</span>
+      <select id="rp-p-${pr.id}" style="width:172px;font-size:12.5px;padding:8px">${opts(cur[pr.id])}</select>
+    </div>`).join(''):'<div class="spin">لا مندوبين</div>';
+}
+// read every promoter's dropdown -> {promoterId: {tp,shift} | {status}}
+function rpPicks(){
+  const out={};
+  rpPromoters.forEach(pr=>{
+    const el=$('rp-p-'+pr.id);
+    if(!el||!el.value)return;
+    const v=el.value;
+    if(v.startsWith('st:'))out[pr.id]={status:v.slice(3)};
+    else{const parts=v.split(':');out[pr.id]={tp:parseInt(parts[1]),shift:parts[2]}}
+  });
+  return out;
 }
 async function saveRoutePlan(){
   $('rpBtn').disabled=true;
   const dt=$('rpDate').value;
-  const rows=[];const used={};let dup=null;
-  rpOutlets.forEach(tp=>{
-    ['day','night'].forEach(sh=>{
-      const el=$('rp-'+tp.id+'-'+sh);
-      if(el&&el.value){
-        const key=el.value+'-'+sh;
-        if(used[key])dup=rpPromoters.find(p=>p.id===el.value);
-        used[key]=true;
-        rows.push({plan_date:dt,touch_point_id:tp.id,shift:sh,promoter_id:el.value,created_by:profile.id});
-      }
-    });
+  const picks=rpPicks();
+  const rows=Object.keys(picks).map(pid=>{
+    const a=picks[pid];
+    return a.status
+      ?{plan_date:dt,promoter_id:pid,touch_point_id:null,shift:null,status:a.status,created_by:profile.id}
+      :{plan_date:dt,promoter_id:pid,touch_point_id:a.tp,shift:a.shift,status:null,created_by:profile.id};
   });
-  if(dup){$('rpBtn').disabled=false;return msg('rpMsg',`${dup.full_name.split(' ')[0]} معيّن على موقعين بنفس الفترة!`,'err')}
-  // replace the day's plan for my city outlets
-  const myTpIds=rpOutlets.map(t=>t.id);
-  await db.from('route_plans').delete().eq('plan_date',dt).in('touch_point_id',myTpIds);
+  // replace this day's plan for the promoters shown
+  const ids=rpPromoters.map(p=>p.id);
+  if(ids.length)await db.from('route_plans').delete().eq('plan_date',dt).in('promoter_id',ids);
   if(rows.length){
     const{error}=await db.from('route_plans').insert(rows);
-    if(error){$('rpBtn').disabled=false;return msg('rpMsg','خطأ في الحفظ','err')}
+    if(error){$('rpBtn').disabled=false;return msg('rpMsg','خطأ في الحفظ — شغّل سكربت الخطة أولاً','err')}
   }
   $('rpBtn').disabled=false;
+  // soft warning: same outlet+shift given to more than one promoter
+  const slot={};let clash=null;
+  Object.keys(picks).forEach(pid=>{
+    const a=picks[pid];if(!a.tp)return;
+    const k=a.tp+'-'+a.shift;
+    if(slot[k]){const tp=rpOutlets.find(t=>t.id===a.tp);clash=(tp?(tp.name.split('_')[1]||tp.name):'')+' — '+SHIFT_AR[a.shift]}
+    slot[k]=true;
+  });
+  if(clash)return msg('rpMsg',`حُفظت الخطة ✅ — تنبيه: ${clash} فيه أكثر من مندوب`,'err');
   msg('rpMsg',`حُفظت خطة ${dt} (${rows.length} تعيين) ✅`,'ok');
 }
 function genRouteMsg(){
   const dt=$('rpDate').value;
-  const[y,mo,dd]=dt.split('-');
-  const name2=id=>{const p=rpPromoters.find(x=>x.id===id);return p?p.full_name:'؟'};
-  const norm=[],ds=[];const activeIds=new Set();const dsActiveIds=new Set();
+  const parts=dt.split('-'),y=parts[0],mo=parts[1],dd=parts[2];
+  const name2=id=>{const p=rpPromoters.find(x=>String(x.id)===String(id));return p?p.full_name:'؟'};
+  const picks=rpPicks();
+  // group promoters under their outlet + shift
+  const byTp={};
+  Object.keys(picks).forEach(pid=>{
+    const a=picks[pid];if(!a.tp)return;
+    byTp[a.tp]=byTp[a.tp]||{day:[],night:[]};
+    byTp[a.tp][a.shift].push(name2(pid));
+  });
+  const norm=[],ds=[];const activeIds=new Set(),dsActiveIds=new Set();
   rpOutlets.forEach(tp=>{
-    const dEl=$('rp-'+tp.id+'-day'),nEl=$('rp-'+tp.id+'-night');
-    const dv=dEl&&dEl.value?dEl.value:null;
-    const nv=nEl&&nEl.value?nEl.value:null;
-    if(!dv&&!nv)return;
-    if(tp.is_ds){
-      // DS block: unicode + name + url + shifts, tallied separately
-      if(dv)dsActiveIds.add(dv);
-      if(nv)dsActiveIds.add(nv);
-      const b=[];
-      if(tp.unicode)b.push(tp.unicode);
-      b.push(tp.name);
-      if(tp.maps_url){b.push('');b.push(tp.maps_url)}
-      if(dv){b.push('');b.push('Day : '+name2(dv))}
-      if(nv)b.push('Night : '+name2(nv));
-      ds.push(b.join('\n'));
-    }else{
-      if(dv)activeIds.add(dv);
-      if(nv)activeIds.add(nv);
-      const b=[];
-      if(tp.unicode)b.push(tp.unicode);
-      b.push(tp.name);
-      if(tp.maps_url){b.push('');b.push(tp.maps_url)}
-      if(dv){b.push('');b.push('Day : '+name2(dv))}
-      if(nv)b.push('Night : '+name2(nv));
-      norm.push(b.join('\n'));
-    }
+    const g=byTp[tp.id];
+    if(!g||(!g.day.length&&!g.night.length))return;
+    const b=[];
+    if(tp.unicode)b.push(tp.unicode);
+    b.push(tp.name);
+    if(tp.maps_url){b.push('');b.push(tp.maps_url)}
+    if(g.day.length){b.push('');b.push('Day : '+g.day.join(' / '))}
+    if(g.night.length)b.push('Night : '+g.night.join(' / '));
+    (tp.is_ds?ds:norm).push(b.join('\n'));
+  });
+  Object.keys(picks).forEach(pid=>{
+    const a=picks[pid];if(!a.tp)return;
+    const tp=rpOutlets.find(t=>t.id===a.tp);
+    (tp&&tp.is_ds?dsActiveIds:activeIds).add(String(pid));
   });
   if(!norm.length&&!ds.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
-  const allActive=new Set([...activeIds,...dsActiveIds]);
-  const absent=rpPromoters.filter(p=>!allActive.has(p.id));
+  // everyone not on an outlet: explicit status, or أوف by default
+  const offList=rpPromoters.filter(p=>!picks[p.id]||picks[p.id].status)
+    .map(p=>({n:p.full_name,s:picks[p.id]&&picks[p.id].status?PLAN_STATUS[picks[p.id].status]:'أوف'}));
   const lines=[profile.city,`${dd}/${mo}/${y}`,''];
   lines.push(norm.join('\n\n🟰🟰🟰🟰🟰🟰\n\n'));
   lines.push('');
   lines.push(`Total active : ${activeIds.size}`);
-  if(absent.length){
+  if(offList.length){
     lines.push('');
     lines.push('Absent:');
-    absent.forEach(p=>lines.push(`${p.full_name} ::: أوف`));
+    offList.forEach(o=>lines.push(`${o.n} ::: ${o.s}`));
   }
   if(ds.length){
     lines.push('');

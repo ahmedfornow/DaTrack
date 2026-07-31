@@ -79,6 +79,28 @@
   .item{background:var(--card2);border:1px solid var(--line-soft);border-radius:12px;margin-top:8px}
   .bar{height:7px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden;margin-top:6px}
   .bar>div{height:100%;border-radius:99px;transition:width .45s ease}
+  .acc{background:linear-gradient(180deg,#131924 0%,var(--card) 100%);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;box-shadow:0 8px 22px rgba(0,0,0,.25)}
+  .acc>summary{list-style:none;cursor:pointer;padding:15px 18px;font-size:14.5px;font-weight:500;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .acc>summary::-webkit-details-marker{display:none}
+  .acc>summary::after{content:'▾';color:var(--gold);font-size:13px;transition:transform .2s;flex-shrink:0}
+  .acc[open]>summary::after{transform:rotate(180deg)}
+  .accBody{padding:0 16px 16px}
+  .grp{display:flex;justify-content:space-between;align-items:center;background:var(--card2);border:1px solid var(--line-soft);border-radius:11px;padding:10px 13px;margin-top:8px;font-size:13px}
+  .qty{min-width:28px;height:26px;padding:0 8px;border-radius:8px;background:rgba(216,189,132,.12);color:var(--gold);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+  .kpi{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+  .kpi .k{background:linear-gradient(180deg,#171d28,#131822);border:1px solid var(--line-soft);border-radius:13px;padding:13px 14px}
+  .kpi .k .v{font-size:23px;font-weight:700;color:var(--gold);line-height:1.1}
+  .kpi .k .s{font-size:10.5px;color:var(--muted);margin-top:3px;letter-spacing:.3px}
+  .kpi .k.wide{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}
+  .tk{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line-soft)}
+  .tk .box{width:24px;height:24px;border-radius:7px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--green);flex-shrink:0;cursor:pointer;transition:all .13s}
+  .tk.done .box{border-color:var(--green);background:rgba(61,220,151,.1)}
+  .tk.done .ttl{text-decoration:line-through;opacity:.45}
+  .tk .ttl{font-size:13.5px;flex:1;line-height:1.4}
+  .pill{font-size:10px;padding:3px 8px;border-radius:99px;background:rgba(216,189,132,.1);color:var(--gold);border:1px solid var(--line-soft);white-space:nowrap;flex-shrink:0}
+  .pill.due{background:rgba(229,96,79,.12);color:var(--red);border-color:rgba(229,96,79,.28)}
+  .dayq{display:flex;gap:8px;margin-top:6px}
+  .dayq .opt-btn{padding:10px 6px;font-size:13px}
 </style>
 </head>
 <body>
@@ -100,6 +122,13 @@
   <div class="card hidden" id="signinCard">
     <div class="welcome">حياك الله 👋</div>
     <div class="pname" id="promoName">—</div>
+    <label>يوم الجلسة</label>
+    <div class="dayq">
+      <div class="opt-btn active" id="dqToday" onclick="quickDay(0)">اليوم</div>
+      <div class="opt-btn" id="dqYest" onclick="quickDay(1)">أمس</div>
+    </div>
+    <input type="date" id="signinDate" style="text-align:center;margin-top:8px" onchange="setSigninDate(this.value)">
+    <div id="dayHint" style="font-size:11.5px;color:var(--muted);margin-top:7px;text-align:center;line-height:1.5"></div>
     <label>حالة اليوم</label>
     <div class="opt-grid" id="statusGrid" style="grid-template-columns:1fr 1fr 1fr"></div>
     <div id="tpWrap">
@@ -135,11 +164,21 @@
 
     <!-- SALES -->
     <div id="paneSales">
-      <div class="counter">
-        <div><div class="num" id="cToday">0</div><div class="lbl">LAS الجلسة</div></div>
-        <div><div class="num" id="cTarget">—</div><div class="lbl">هدف اليوم</div></div>
-        <div><div class="num" id="cSK">0</div><div class="lbl">SK</div></div>
-        <div><div class="num" id="cMGM">0</div><div class="lbl">MGM</div></div>
+      <div class="kpi">
+        <div class="k"><div class="v" id="cToday">0</div><div class="s">LAS الجلسة</div></div>
+        <div class="k"><div class="v" id="cTarget">—</div><div class="s">هدف اليوم</div></div>
+        <div class="k wide">
+          <div><div class="v" id="cSK" style="font-size:19px">0</div><div class="s">SK</div></div>
+          <div><div class="v" id="cMGM" style="font-size:19px">0</div><div class="s">MGM</div></div>
+          <div><div class="v" id="cLD" style="font-size:19px">0</div><div class="s">L.D</div></div>
+          <div><div class="v" id="cLau" style="font-size:19px;color:var(--muted)">0</div><div class="s">LAU</div></div>
+        </div>
+        <div class="k wide" style="display:block">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span class="s">تحقيق هدف الجلسة</span><span class="s" id="cPctTxt" dir="ltr">—</span>
+          </div>
+          <div class="bar" style="margin-top:8px"><div id="cBar" style="width:0%;background:var(--gold)"></div></div>
+        </div>
       </div>
       <div class="card">
         <h2>تسجيل بيع جديد</h2>
@@ -266,37 +305,61 @@
     </div>
 
     <div id="paneTeam" class="hidden">
-      <div class="card">
-      <h2>📆 التسجيل + تحقيق الهدف (LAS)</h2>
-      <div id="fillWidget"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>📋 الحضور</h2>
-      <div id="attList"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>🛒 مبيعات المندوبين</h2>
-      <div id="promoSales"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>📍 مبيعات المواقع</h2>
-      <div id="outletSales"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>📦 جرد المواقع (الفترة)</h2>
-      <div id="stockView"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>✅ التشيك ليست اليوم</h2>
-      <div id="checkView"><div class="spin">جاري التحميل...</div></div>
-      </div>
-      <div class="card">
-      <h2>🕐 آخر العمليات</h2>
-      <div id="salesFeed"><div class="spin">جاري التحميل...</div></div>
-      </div>
+      <details class="acc" open>
+        <summary>📆 التسجيل + تحقيق الهدف (LAS)</summary>
+        <div class="accBody"><div id="fillWidget"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
+      <details class="acc" open>
+        <summary>🛒 مبيعات المندوبين</summary>
+        <div class="accBody"><div id="promoSales"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
+      <details class="acc">
+        <summary>📍 مبيعات المواقع</summary>
+        <div class="accBody"><div id="outletSales"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
+      <details class="acc">
+        <summary>📱 المبيعات حسب الجهاز</summary>
+        <div class="accBody"><div id="devBreak"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
+      <details class="acc">
+        <summary>📋 الحضور</summary>
+        <div class="accBody"><div id="attList"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
+      <details class="acc">
+        <summary>📦 جرد المواقع (الفترة)</summary>
+        <div class="accBody"><div id="stockView"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
+      <details class="acc">
+        <summary>✅ التشيك ليست اليوم</summary>
+        <div class="accBody"><div id="checkView"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
+      <details class="acc">
+        <summary>🕐 آخر العمليات</summary>
+        <div class="accBody"><div id="salesFeed"><div class="spin">جاري التحميل...</div></div></div>
+      </details>
     </div>
 
     <div id="panePlan" class="hidden">
+      <div id="tasksCard" class="card hidden">
+        <h2>🗓️ متابعاتي ومهامي</h2>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:4px">تقارير دورية أو مهام لمرة واحدة — تظهر لك أنت فقط</p>
+        <div id="tasksList"><div class="spin">جاري التحميل...</div></div>
+        <label>إضافة مهمة</label>
+        <input type="text" id="ntkTitle" style="text-align:right;letter-spacing:0" placeholder="مثال: مراجعة تقرير المبيعات">
+        <label>التكرار</label>
+        <div class="opt-grid" id="ntkKindGrid" style="grid-template-columns:1fr 1fr 1fr"></div>
+        <div id="ntkDayWrap" class="hidden">
+          <label>يوم الأسبوع</label>
+          <select id="ntkWeekday"></select>
+        </div>
+        <div id="ntkDateWrap" class="hidden">
+          <label>تاريخ الاستحقاق (اختياري)</label>
+          <input type="date" id="ntkDue" style="text-align:center">
+        </div>
+        <button onclick="addTask()">إضافة ➕</button>
+        <button onclick="resetTasks()" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">إعادة تعيين العلامات ↻</button>
+        <div class="msg" id="tkMsg"></div>
+      </div>
       <div id="routePlan" class="card hidden">
         <h2>🗺️ خطة اليوم (Route Plan)</h2>
         <label>تاريخ الخطة</label>
@@ -326,10 +389,11 @@
         <input type="text" id="ntpName" style="text-align:right;letter-spacing:0" placeholder="اسم الموقع (فريد)">
         <input type="text" id="ntpCode" style="text-align:left;letter-spacing:0;direction:ltr;margin-top:8px" placeholder="Unicode / كود الموقع (اختياري)">
         <input type="text" id="ntpMaps" style="text-align:left;letter-spacing:0;direction:ltr;margin-top:8px" placeholder="رابط Google Maps (اختياري)">
-        <label>دوامين (نهاري + ليلي)؟</label>
+        <label>فترات الموقع</label>
         <div class="shift-row">
-          <div class="opt-btn active" id="ntpDual-no" onclick="ntpDual(false)">لا — نهاري فقط</div>
-          <div class="opt-btn" id="ntpDual-yes" onclick="ntpDual(true)">نعم — دوامين</div>
+          <div class="opt-btn active" id="ntpMode-day" onclick="ntpMode('day')">نهاري ☀️</div>
+          <div class="opt-btn" id="ntpMode-night" onclick="ntpMode('night')">ليلي 🌙</div>
+          <div class="opt-btn" id="ntpMode-dual" onclick="ntpMode('dual')">دوامين</div>
         </div>
         <label>نوع الموقع</label>
         <div class="shift-row">
@@ -337,7 +401,7 @@
           <div class="opt-btn" id="ntpDs-yes" onclick="ntpDs(true)">Direct Sales (DS)</div>
         </div>
         <label>هدف الشهر الحالي (اختياري)</label>
-        <div class="shift-row">
+        <div class="shift-row" id="ntpDayRow">
           <input type="text" inputmode="decimal" id="ntpTgDay" placeholder="مبيعات نهاري">
           <input type="text" inputmode="decimal" id="ntpGtDay" placeholder="GT نهاري">
         </div>
@@ -379,14 +443,23 @@ const TYPES = ['SK','MGM','SK+MGM','LD'];
 const CUSTS = ['LAS','LAU'];
 const STATUSES = {work:'دوام 🏪', off:'أوف 🌴', sick:'مرضية 🤒', leave:'استئذان 🕐', absent:'غياب 🚫'};
 // All date math runs in KSA time (Asia/Riyadh, UTC+3, no DST) so the day boundary matches the local business day — matters for night shifts.
-function ksaNow(){return new Date(Date.now()+3*3600*1000);}
-const ksaDayOfMonth=()=>ksaNow().getUTCDate();
-const curMonth=()=>ksaNow().toISOString().slice(0,7);
+// The work day ends at 02:00 KSA — a sale logged at 01:30 belongs to the PREVIOUS calendar day.
+// Change DAY_CUTOFF_HOUR here and every date in the app follows.
+const DAY_CUTOFF_HOUR=2;
+function ksaNow(){return new Date(Date.now()+3*3600*1000);}                       // real KSA clock
+function bizNow(){return new Date(Date.now()+(3-DAY_CUTOFF_HOUR)*3600*1000);}     // business day
+const ksaDayOfMonth=()=>bizNow().getUTCDate();
+const curMonth=()=>bizNow().toISOString().slice(0,7);
 const MONTH_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-const curMonthName=()=>MONTH_AR[ksaNow().getUTCMonth()]+' '+ksaNow().getUTCFullYear();
-const todayStr=()=>ksaNow().toISOString().slice(0,10);
+const curMonthName=()=>MONTH_AR[bizNow().getUTCMonth()]+' '+bizNow().getUTCFullYear();
+const todayStr=()=>bizNow().toISOString().slice(0,10);
+// Outlet shift mode: 'day' | 'night' | 'dual'  (falls back to legacy dual_shift)
+const SHIFT_AR={day:'نهاري ☀️',night:'ليلي 🌙'};
+function tpMode(tp){return tp&&tp.shift_mode?tp.shift_mode:(tp&&tp.dual_shift?'dual':'day');}
+function tpShifts(tp){const m=tpMode(tp);return m==='dual'?['day','night']:[m];}
 
 let profile=null, touchPoints=[], chosenShift='day', chosenStatus='work';
+let signinDate=null, daySessions=[];
 let session=null;        // active attendance session (today or a past day)
 let todaySession=null;   // today's attendance record
 let sel={dev:null,color:null,type:null,cust:null};
@@ -421,7 +494,7 @@ async function doLogout(){await db.auth.signOut();profile=null;session=null;toda
 
 // ============ PROMOTER: DAY SIGN-IN ============
 async function promoterFlow(){
-  const{data:att}=await db.from('attendance').select('*, touch_points(name,dual_shift)')
+  const{data:att}=await db.from('attendance').select('*, touch_points(name,dual_shift,shift_mode)')
     .eq('promoter_id',profile.id).eq('work_date',todayStr())
     .order('checked_in_at',{ascending:false}).limit(1);
   if(att&&att.length){todaySession=att[0];session=todaySession;return openWork()}
@@ -431,16 +504,52 @@ async function promoterFlow(){
   touchPoints=tps||[];
   $('tpSelect').innerHTML=touchPoints.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
   $('tpSelect').onchange=updateShiftUI;
-  // pre-fill from today's route plan
-  const{data:plan}=await db.from('route_plans').select('touch_point_id,shift').eq('plan_date',todayStr()).eq('promoter_id',profile.id).limit(1);
+  // day picker: default = business today, allow back to the 1st of the month
+  const m=curMonth();
+  $('signinDate').min=m+'-01';
+  $('signinDate').max=todayStr();
+  await setSigninDate(todayStr());
+  show('signinCard');
+}
+function shiftDate(days){const d=bizNow();d.setUTCDate(d.getUTCDate()-days);return d.toISOString().slice(0,10)}
+function quickDay(back){setSigninDate(shiftDate(back))}
+async function setSigninDate(dt){
+  if(!dt)return;
+  const min=$('signinDate').min,max=$('signinDate').max;
+  if(dt<min)dt=min; if(dt>max)dt=max;
+  signinDate=dt;
+  $('signinDate').value=dt;
+  $('dqToday').classList.toggle('active',dt===shiftDate(0));
+  $('dqYest').classList.toggle('active',dt===shiftDate(1));
+  // already-registered shifts for that day
+  const{data:ex}=await db.from('attendance').select('*, touch_points(name,dual_shift,shift_mode)')
+    .eq('promoter_id',profile.id).eq('work_date',dt);
+  daySessions=ex||[];
+  const taken=daySessions.map(r=>r.shift).filter(Boolean);
+  const hint=$('dayHint');
+  if(daySessions.length){
+    const lbl=daySessions.map(r=>r.status==='work'?(SHIFT_AR[r.shift]||''):STATUSES[r.status]).join(' + ');
+    hint.innerHTML=`مسجل مسبقاً: ${lbl} — <a href="#" onclick="openDaySession();return false" style="color:var(--gold)">افتح الجلسة ↩</a>`;
+  }else{
+    hint.textContent=dt===shiftDate(0)?'يوم اليوم — لم يسجل بعد':'يوم سابق — سيسجل بأثر رجعي';
+  }
+  window.takenShifts=taken;
   updateShiftUI();
+  // pre-fill from that day's route plan
+  const{data:plan}=await db.from('route_plans').select('touch_point_id,shift').eq('plan_date',dt).eq('promoter_id',profile.id).limit(1);
   if(plan&&plan.length){
     $('tpSelect').value=plan[0].touch_point_id;
     updateShiftUI();
     if(plan[0].shift==='night')pickShift('night');
-    msg('signinMsg',`خطتك اليوم جاهزة من المشرف 🗺️ ${plan[0].shift==='day'?'☀️':'🌙'}`,'ok');
+    msg('signinMsg',`خطتك جاهزة من المشرف 🗺️ ${SHIFT_AR[plan[0].shift]||''}`,'ok');
   }
-  show('signinCard');
+}
+function openDaySession(){
+  const s=daySessions[0];
+  if(!s)return;
+  session=s;
+  if(s.work_date===todayStr())todaySession=s;
+  openWork();
 }
 function buildStatusGrid(){
   $('statusGrid').innerHTML=Object.keys(STATUSES).map(s=>`<div class="opt-btn ${s===chosenStatus?'active':''}" id="st-${s}" onclick="pickStatus('${s}')">${STATUSES[s]}</div>`).join('');
@@ -452,19 +561,27 @@ function pickStatus(s){
 }
 function updateShiftUI(){
   const tp=touchPoints.find(t=>t.id==$('tpSelect').value);
-  $('shiftWrap').style.display=(tp&&tp.dual_shift)?'block':'none';
-  if(!(tp&&tp.dual_shift))chosenShift='day';
+  const shifts=tpShifts(tp);
+  const taken=window.takenShifts||[];
+  // only offer the shift picker when the outlet really runs both
+  $('shiftWrap').style.display=shifts.length>1?'block':'none';
+  $('shiftDay').style.display=shifts.includes('day')?'block':'none';
+  $('shiftNight').style.display=shifts.includes('night')?'block':'none';
+  // land on a shift the outlet runs AND that isn't already registered for the chosen day
+  const free=shifts.filter(s=>!taken.includes(s));
+  if(!shifts.includes(chosenShift)||(free.length&&!free.includes(chosenShift)))pickShift(free[0]||shifts[0]);
 }
 function pickShift(s){chosenShift=s;$('shiftDay').classList.toggle('active',s==='day');$('shiftNight').classList.toggle('active',s==='night')}
 async function doSignin(){
   $('signinBtn').disabled=true;
+  const wd=signinDate||todayStr();
   const row=chosenStatus==='work'
-    ?{promoter_id:profile.id,touch_point_id:parseInt($('tpSelect').value),shift:chosenShift,status:'work'}
-    :{promoter_id:profile.id,status:chosenStatus};
-  const{data,error}=await db.from('attendance').insert(row).select('*, touch_points(name,dual_shift)').single();
+    ?{promoter_id:profile.id,work_date:wd,touch_point_id:parseInt($('tpSelect').value),shift:chosenShift,status:'work'}
+    :{promoter_id:profile.id,work_date:wd,status:chosenStatus};
+  const{data,error}=await db.from('attendance').insert(row).select('*, touch_points(name,dual_shift,shift_mode)').single();
   $('signinBtn').disabled=false;
   if(error){
-    if(error.code==='23505')return msg('signinMsg','يومك مسجل مسبقاً لهذه الفترة ✋','err');
+    if(error.code==='23505'){await setSigninDate(signinDate||todayStr());return msg('signinMsg','هذا اليوم مسجل مسبقاً لنفس الفترة — افتح الجلسة من الأعلى ✋','err')}
     return msg('signinMsg','خطأ في التسجيل — حاول مجدداً','err');
   }
   todaySession=data;session=data;openWork();
@@ -488,7 +605,7 @@ async function openWork(){
   $('tabCheck').style.display=(working&&!isPast())?'block':'none';
   $('tabDays').style.display='block';
   show('workScreen');
-  if(working){buildSaleUI();showTab('sales');loadMyTarget();loadTodaySales();loadMyAnalytics()}
+  if(working){buildSaleUI();showTab('sales');loadMyTarget().then(loadTodaySales);loadMyAnalytics()}
   else showTab('days');
 }
 async function returnToday(){
@@ -527,6 +644,7 @@ function pickOpt(k,v){
 async function loadMyTarget(){
   const{data}=await db.from('targets').select('daily_target,gt_target')
     .eq('touch_point_id',session.touch_point_id).eq('shift',session.shift).eq('month',session.work_date.slice(0,7)).maybeSingle();
+  window.myTarget=data?Number(data.daily_target):null;
   $('cTarget').textContent=data?Number(data.daily_target):'—';
   window.myGtTarget=data?Number(data.gt_target):null;
   $('gtLabel').textContent=window.myGtTarget!=null?`عدد الـ Guided Trials (الهدف: ${window.myGtTarget})`:'عدد الـ Guided Trials';
@@ -550,16 +668,40 @@ async function loadTodaySales(){
   const lasN=sales.filter(s=>s.customer_type==='LAS').length;
   const lauN=sales.length-lasN;
   $('cToday').textContent=lasN;
-  $('cToday').title='LAS: '+lasN+(lauN?' · LAU: '+lauN+' (لا يحتسب بالهدف)':'');
+  $('cLau').textContent=lauN;
   $('cSK').textContent=sales.filter(s=>s.sale_type==='SK'||s.sale_type==='SK+MGM').length;
   $('cMGM').textContent=sales.filter(s=>s.sale_type==='MGM'||s.sale_type==='SK+MGM').length;
-  $('salesList').innerHTML=sales.length?sales.map(s=>`
-    <div class="sale-item">
-      <div><b>${DEV_SHORT[s.device_type]||s.device_type}</b> — ${s.color}
-        <div class="meta">${s.sale_type} · ${s.customer_type} · ${new Date(s.created_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>
+  $('cLD').textContent=sales.filter(s=>s.sale_type==='LD').length;
+  // session target progress (LAS only)
+  const tg=window.myTarget;
+  if(!isNaN(tg)&&tg>0){
+    const pct=Math.round(lasN/tg*100);
+    $('cPctTxt').textContent=pct+'%';
+    $('cBar').style.width=Math.min(100,pct)+'%';
+    $('cBar').style.background=pct>=100?'var(--green)':pct>=70?'var(--gold)':'var(--red)';
+  }else{$('cPctTxt').textContent='—';$('cBar').style.width='0%'}
+  // grouped: one row per device+color+type+customer, with a count
+  const groups={};
+  sales.forEach(s=>{
+    const k=[s.device_type,s.color,s.sale_type,s.customer_type].join('|');
+    if(!groups[k])groups[k]={...s,ids:[],n:0};
+    groups[k].ids.push(s.id);groups[k].n++;
+  });
+  const keys=Object.keys(groups).sort((a,b)=>groups[b].n-groups[a].n);
+  $('salesList').innerHTML=keys.length?keys.map(k=>{
+    const g=groups[k];
+    return `<div class="grp">
+      <div style="min-width:0">
+        <b>${DEV_SHORT[g.device_type]||g.device_type}</b> — ${g.color}
+        <div class="meta">${g.sale_type} · ${g.customer_type}</div>
       </div>
-      <button class="del" onclick="delSale(${s.id})">🗑️</button>
-    </div>`).join(''):'<div class="spin">لا مبيعات بعد</div>';
+      <span style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+        <span class="qty">${g.n}</span>
+        <button class="del" onclick="delSale(${g.ids[0]})">🗑️</button>
+      </span>
+    </div>`;
+  }).join('')+`<div style="text-align:center;font-size:11px;color:var(--muted);margin-top:10px">${sales.length} عملية · ${keys.length} صنف</div>`
+   :'<div class="spin">لا مبيعات بعد</div>';
 }
 async function delSale(id){
   if(!confirm('حذف هذه العملية؟'))return;
@@ -732,7 +874,7 @@ async function loadDays(){
     touchPoints=tps||[];
   }
   const m=curMonth();
-  const{data:recs}=await db.from('attendance').select('*, touch_points(name,dual_shift)')
+  const{data:recs}=await db.from('attendance').select('*, touch_points(name,dual_shift,shift_mode)')
     .eq('promoter_id',profile.id).gte('work_date',m+'-01').order('work_date',{ascending:false});
   const byDate={};
   (recs||[]).forEach(r=>{byDate[r.work_date]=byDate[r.work_date]||[];byDate[r.work_date].push(r)});
@@ -772,15 +914,24 @@ function openBackfill(dt){
       <div class="opt-grid g3">${Object.keys(STATUSES).map(s=>`<div class="opt-btn ${s==='work'?'active':''}" id="bfst-${dt}-${s}" onclick="bfPick('${dt}','status','${s}')">${STATUSES[s]}</div>`).join('')}</div>
       <div id="bfwork-${dt}">
         <label>الموقع</label>
-        <select id="bftp-${dt}" onchange="bfState['${dt}'].tp=parseInt(this.value)">${touchPoints.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}</select>
+        <select id="bftp-${dt}" onchange="bfTp('${dt}',this.value)">${touchPoints.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}</select>
         <label>الفترة</label>
-        <div class="shift-row">
+        <div class="shift-row" id="bfshrow-${dt}">
           <div class="opt-btn active" id="bfsh-${dt}-day" onclick="bfPick('${dt}','shift','day')">نهاري ☀️</div>
           <div class="opt-btn" id="bfsh-${dt}-night" onclick="bfPick('${dt}','shift','night')">ليلي 🌙</div>
         </div>
       </div>
       <button style="margin-top:12px" onclick="saveBackfill('${dt}')">حفظ اليوم ✅</button>`;
+    bfShiftUI(dt);
   }
+}
+function bfTp(dt,v){bfState[dt].tp=parseInt(v);bfShiftUI(dt)}
+function bfShiftUI(dt){
+  const tp=touchPoints.find(t=>t.id==bfState[dt].tp);
+  const shifts=tpShifts(tp);
+  $('bfshrow-'+dt).style.display=shifts.length>1?'flex':'none';
+  ['day','night'].forEach(x=>{const el=$('bfsh-'+dt+'-'+x);if(el)el.style.display=shifts.includes(x)?'block':'none'});
+  if(!shifts.includes(bfState[dt].shift))bfPick(dt,'shift',shifts[0]);
 }
 function bfPick(dt,k,v){
   bfState[dt][k]=v;
@@ -812,7 +963,7 @@ async function delDay(id){
   loadDays();
 }
 async function switchSession(attId){
-  const{data}=await db.from('attendance').select('*, touch_points(name,dual_shift)').eq('id',attId).single();
+  const{data}=await db.from('attendance').select('*, touch_points(name,dual_shift,shift_mode)').eq('id',attId).single();
   if(!data)return;
   session=data;
   openWork();
@@ -833,7 +984,7 @@ function setPeriod(p){
   loadStaffCounts();
 }
 function periodStart(){
-  const d=ksaNow();
+  const d=bizNow();
   if(staffPeriod==='today')return d.toISOString().slice(0,10);
   if(staffPeriod==='week'){d.setUTCDate(d.getUTCDate()-6);return d.toISOString().slice(0,10)}
   return d.toISOString().slice(0,7)+'-01';
@@ -930,8 +1081,9 @@ async function loadDashLists(city,start){
     </div><span style="display:flex;gap:8px;align-items:center"><span style="font-size:11px;color:var(--muted)">GT: ${a.guided_trials}</span>${canDelAtt?`<button class="del" onclick="supDelAtt(${a.id})">🗑️</button>`:''}</span></div>`).join('')
     :'<div class="spin">لا تسجيلات في الفترة</div>';
   const{data:sales}=await db.from('sell_operations')
-    .select('sale_type,promoter_id,users(full_name),attendance!inner(touch_points!inner(name,city))')
+    .select('sale_type,customer_type,device_type,color,promoter_id,users(full_name),attendance!inner(touch_points!inner(name,city))')
     .gte('work_date',start).eq('attendance.touch_points.city',city);
+  renderDevBreak(sales||[]);
   const by={},byOut={};
   (sales||[]).forEach(s=>{
     const n=s.users.full_name;
@@ -962,7 +1114,35 @@ async function loadDashLists(city,start){
   loadStockView(city,start);
   loadCheckView(city);
   loadSalesFeed(city,start);
-  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager();$('routePlan').classList.remove('hidden');initRoutePlan()}
+  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager();$('routePlan').classList.remove('hidden');initRoutePlan();$('tasksCard').classList.remove('hidden');if(!window.tkLoaded){window.tkLoaded=true;buildTaskUI();loadTasks()}}
+}
+// device / colour breakdown for the period
+function renderDevBreak(sales){
+  const byDev={},byColor={};
+  sales.forEach(s=>{
+    const d=DEV_SHORT[s.device_type]||s.device_type||'؟';
+    byDev[d]=(byDev[d]||0)+1;
+    const k=d+' — '+(s.color||'؟');
+    byColor[k]=(byColor[k]||0)+1;
+  });
+  const devs=Object.keys(byDev).sort((a,b)=>byDev[b]-byDev[a]);
+  const total=sales.length;
+  if(!total){$('devBreak').innerHTML='<div class="spin">لا مبيعات في الفترة</div>';return}
+  const palette=['var(--gold)','#7fb2d8','#c98fd0'];
+  let html=devs.map((d,i)=>{
+    const n=byDev[d],pct=Math.round(n/total*100);
+    return `<div style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <span style="font-size:13px;font-weight:700">${d}</span>
+        <span dir="ltr" style="font-size:12px;color:var(--muted)">${n} · ${pct}%</span>
+      </div>
+      <div class="bar"><div style="width:${pct}%;background:${palette[i%palette.length]}"></div></div>
+    </div>`;
+  }).join('');
+  const colors=Object.keys(byColor).sort((a,b)=>byColor[b]-byColor[a]).slice(0,8);
+  html+='<div class="cat-title" style="margin-top:18px">أعلى الألوان</div>';
+  html+=colors.map(c=>`<div class="grp" style="margin-top:6px"><span style="font-size:12.5px">${c}</span><span class="qty">${byColor[c]}</span></div>`).join('');
+  $('devBreak').innerHTML=html;
 }
 // team curve
 let teamChartObj=null;
@@ -1070,8 +1250,13 @@ async function supDelSale(id){
   await db.from('sell_operations').delete().eq('id',id);
   loadStaffCounts();
 }
-let ntpDualVal=false;
-function ntpDual(v){ntpDualVal=v;$('ntpDual-no').classList.toggle('active',!v);$('ntpDual-yes').classList.toggle('active',v);$('ntpNightRow').classList.toggle('hidden',!v)}
+let ntpModeVal='day';
+function ntpMode(v){
+  ntpModeVal=v;
+  ['day','night','dual'].forEach(x=>$('ntpMode-'+x).classList.toggle('active',x===v));
+  $('ntpNightRow').classList.toggle('hidden',v==='day');
+  $('ntpDayRow').classList.toggle('hidden',v==='night');
+}
 let ntpDsVal=false;
 function ntpDs(v){ntpDsVal=v;$('ntpDs-no').classList.toggle('active',!v);$('ntpDs-yes').classList.toggle('active',v)}
 
@@ -1079,7 +1264,7 @@ function ntpDs(v){ntpDsVal=v;$('ntpDs-no').classList.toggle('active',!v);$('ntpD
 let rpOutlets=[],rpPromoters=[],rpInited=false;
 function initRoutePlan(){
   if(rpInited)return;rpInited=true;
-  const d=ksaNow();d.setUTCDate(d.getUTCDate()+1);
+  const d=bizNow();d.setUTCDate(d.getUTCDate()+1);
   $('rpDate').value=d.toISOString().slice(0,10);
   loadRoutePlan();
 }
@@ -1095,11 +1280,7 @@ async function loadRoutePlan(){
   const opts=sel=>'<option value="">— بدون —</option>'+rpPromoters.map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${p.full_name}</option>`).join('');
   const row=(tp,sh,lbl)=>`<div class="stock-row"><span style="font-size:12.5px">${(tp.name.split('_')[1]||tp.name)} — ${lbl}</span>
     <select id="rp-${tp.id}-${sh}" style="width:160px;font-size:13px;padding:8px">${opts(assigned[tp.id+'-'+sh])}</select></div>`;
-  $('rpSlots').innerHTML=rpOutlets.map(tp=>{
-    let r=row(tp,'day','نهاري ☀️');
-    if(tp.dual_shift)r+=row(tp,'night','ليلي 🌙');
-    return r;
-  }).join('')||'<div class="spin">لا مواقع نشطة</div>';
+  $('rpSlots').innerHTML=rpOutlets.map(tp=>tpShifts(tp).map(sh=>row(tp,sh,SHIFT_AR[sh])).join('')).join('')||'<div class="spin">لا مواقع نشطة</div>';
 }
 async function saveRoutePlan(){
   $('rpBtn').disabled=true;
@@ -1198,7 +1379,7 @@ async function loadTpManager(){
     <div class="sale-item" style="display:block;${tp.active?'':'opacity:.45'}">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div><b>${tp.name.split('_')[1]||tp.name}</b>
-          <div class="meta">${tp.unicode?tp.unicode+' · ':''}${tp.dual_shift?'دوامين ☀️🌙':'نهاري ☀️'}${tp.is_ds?' · 🏷️DS':''}${tp.maps_url?' · 📍':''} · ${tp.active?'نشط':'موقوف'}</div>
+          <div class="meta">${tp.unicode?tp.unicode+' · ':''}${tpMode(tp)==='dual'?'دوامين ☀️🌙':tpMode(tp)==='night'?'ليلي 🌙':'نهاري ☀️'}${tp.is_ds?' · 🏷️DS':''}${tp.maps_url?' · 📍':''} · ${tp.active?'نشط':'موقوف'}</div>
         </div>
         <span style="display:flex;gap:6px">
           <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="editTp(${tp.id})">✏️</button>
@@ -1210,19 +1391,24 @@ async function loadTpManager(){
         <input type="text" id="ed-code-${tp.id}" value="${tp.unicode||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="Unicode">
         <input type="text" id="ed-maps-${tp.id}" value="${tp.maps_url||''}" style="text-align:left;direction:ltr;font-size:13px;margin-top:6px" placeholder="رابط الخريطة">
         <div class="shift-row" style="margin-top:6px">
-          <div class="opt-btn ${tp.dual_shift?'active':''}" id="ed-dual-${tp.id}" onclick="this.classList.toggle('active')">دوامين</div>
+          <div class="opt-btn ${tpMode(tp)==='day'?'active':''}" id="ed-mode-day-${tp.id}" onclick="edMode(${tp.id},'day')">نهاري ☀️</div>
+          <div class="opt-btn ${tpMode(tp)==='night'?'active':''}" id="ed-mode-night-${tp.id}" onclick="edMode(${tp.id},'night')">ليلي 🌙</div>
+          <div class="opt-btn ${tpMode(tp)==='dual'?'active':''}" id="ed-mode-dual-${tp.id}" onclick="edMode(${tp.id},'dual')">دوامين</div>
         </div>
         <button style="margin-top:8px" onclick="saveTpEdit(${tp.id})">حفظ التعديل ✅</button>
       </div>
     </div>`).join('')||'<div class="spin">لا مواقع</div>';
 }
+let edModeVal={};
+function edMode(id,v){edModeVal[id]=v;['day','night','dual'].forEach(x=>$('ed-mode-'+x+'-'+id).classList.toggle('active',x===v))}
 function editTp(id){$('ed-'+id).classList.toggle('hidden')}
 async function saveTpEdit(id){
   const name=$('ed-name-'+id).value.trim();
   if(!name)return msg('tpMsg','الاسم مطلوب','err');
   const{error}=await db.from('touch_points').update({
     name,unicode:$('ed-code-'+id).value.trim()||null,maps_url:$('ed-maps-'+id).value.trim()||null,
-    dual_shift:$('ed-dual-'+id).classList.contains('active')
+    shift_mode:edModeVal[id]||tpMode(tpCache.find(x=>x.id===id)),
+    dual_shift:(edModeVal[id]||tpMode(tpCache.find(x=>x.id===id)))==='dual' 
   }).eq('id',id);
   if(error)return msg('tpMsg',error.code==='23505'?'الاسم مستخدم':'خطأ في التعديل','err');
   msg('tpMsg','تم تعديل الموقع ✅','ok');
@@ -1233,22 +1419,25 @@ async function addTp(){
   const m=$('ntpMaps').value.trim();
   const code=$('ntpCode').value.trim();
   if(!n)return msg('tpMsg','اكتب اسم الموقع','err');
-  const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,dual_shift:ntpDualVal,is_ds:ntpDsVal,city:profile.city}).select().single();
+  const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,shift_mode:ntpModeVal,dual_shift:ntpModeVal==='dual',is_ds:ntpDsVal,city:profile.city}).select().single();
   if(error){
     if(error.code==='23505')return msg('tpMsg','الاسم مستخدم مسبقاً — الأسماء فريدة','err');
     return msg('tpMsg','خطأ: '+(error.message||'غير معروف')+(String(error.message).includes('unicode')?' — شغّل patch v8 أولاً!':''),'err');
   }
   // targets in same action (if provided)
   const tgRows=[];
-  const td=parseFloat($('ntpTgDay').value),gd=parseFloat($('ntpGtDay').value);
-  if(!isNaN(td))tgRows.push({touch_point_id:newTp.id,shift:'day',daily_target:td,gt_target:isNaN(gd)?0:gd,month:curMonth()});
-  if(ntpDualVal){
+  const shifts=tpShifts({shift_mode:ntpModeVal});
+  if(shifts.includes('day')){
+    const td=parseFloat($('ntpTgDay').value),gd=parseFloat($('ntpGtDay').value);
+    if(!isNaN(td))tgRows.push({touch_point_id:newTp.id,shift:'day',daily_target:td,gt_target:isNaN(gd)?0:gd,month:curMonth()});
+  }
+  if(shifts.includes('night')){
     const tn=parseFloat($('ntpTgNight').value),gn=parseFloat($('ntpGtNight').value);
     if(!isNaN(tn))tgRows.push({touch_point_id:newTp.id,shift:'night',daily_target:tn,gt_target:isNaN(gn)?0:gn,month:curMonth()});
   }
   if(tgRows.length)await db.from('targets').insert(tgRows);
   ['ntpName','ntpMaps','ntpCode','ntpTgDay','ntpGtDay','ntpTgNight','ntpGtNight'].forEach(i=>$(i).value='');
-  ntpDual(false);ntpDs(false);
+  ntpMode('day');ntpDs(false);
   msg('tpMsg',`أُضيف الموقع ✅${tgRows.length?' مع أهدافه 🎯':' — حدد هدفه لاحقاً'}`,'ok');
   loadTpManager();
   window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;
@@ -1296,11 +1485,7 @@ async function loadTargetsEditor(){
       <input type="text" inputmode="decimal" id="gt-${tp.id}-${sh}" value="${gmap[tp.id+'-'+sh]??''}" placeholder="GT" style="width:60px">
     </span></div>`;
   $('targetsList').innerHTML='<div class="stock-row" style="border:none"><span style="color:var(--muted);font-size:11px">الموقع</span><span style="display:flex;gap:6px;color:var(--muted);font-size:11px"><span style="width:72px;text-align:center">هدف مبيعات</span><span style="width:60px;text-align:center">هدف GT</span></span></div>'+
-    tgOutlets.map(tp=>{
-      let rows=row(tp,'day','نهاري');
-      if(tp.dual_shift)rows+=row(tp,'night','ليلي');
-      return rows;
-    }).join('');
+    tgOutlets.map(tp=>tpShifts(tp).map(sh=>row(tp,sh,sh==='day'?'نهاري':'ليلي')).join('')).join('');
 }
 async function saveTargets(){
   $('tgBtn').disabled=true;
@@ -1316,6 +1501,72 @@ async function saveTargets(){
   $('tgBtn').disabled=false;
   if(error)return msg('tgMsg','خطأ في الحفظ','err');
   msg('tgMsg',`تم حفظ أهداف الشهر (${rows.length}) 🎯`,'ok');
+}
+
+// ---- MY TASKS / REMINDERS (supervisor only, private) ----
+const TASK_KIND={daily:'يومي',weekly:'أسبوعي',once:'مرة واحدة'};
+const WEEKDAY_AR=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+let ntkKind='daily';
+function buildTaskUI(){
+  $('ntkKindGrid').innerHTML=Object.keys(TASK_KIND).map(k=>`<div class="opt-btn ${k===ntkKind?'active':''}" id="ntk-${k}" onclick="pickTaskKind('${k}')">${TASK_KIND[k]}</div>`).join('');
+  $('ntkWeekday').innerHTML=WEEKDAY_AR.map((d,i)=>`<option value="${i}">${d}</option>`).join('');
+  pickTaskKind('daily');
+}
+function pickTaskKind(k){
+  ntkKind=k;
+  Object.keys(TASK_KIND).forEach(x=>$('ntk-'+x).classList.toggle('active',x===k));
+  $('ntkDayWrap').classList.toggle('hidden',k!=='weekly');
+  $('ntkDateWrap').classList.toggle('hidden',k!=='once');
+}
+async function loadTasks(){
+  const{data,error}=await db.from('sup_tasks').select('*').eq('owner_id',profile.id)
+    .order('done').order('kind').order('id');
+  if(error)return $('tasksList').innerHTML='<div class="spin">شغّل سكربت الجداول أولاً</div>';
+  const rows=data||[];
+  const today=todayStr(),wd=new Date(today+'T12:00:00').getDay();
+  const badge=t=>{
+    if(t.kind==='weekly')return `<span class="pill">${WEEKDAY_AR[t.weekday??0]}${t.weekday===wd?' · اليوم':''}</span>`;
+    if(t.kind==='once')return t.due_date?`<span class="pill ${(!t.done&&t.due_date<=today)?'due':''}">${t.due_date}</span>`:'<span class="pill">مرة واحدة</span>';
+    return '<span class="pill">يومي</span>';
+  };
+  const pend=rows.filter(t=>!t.done).length;
+  $('tasksList').innerHTML=rows.length?rows.map(t=>`
+    <div class="tk ${t.done?'done':''}" id="tk-${t.id}">
+      <div class="box" onclick="toggleTask(${t.id},${t.done})">${t.done?'✓':''}</div>
+      <span class="ttl">${t.title}</span>
+      ${badge(t)}
+      <button class="del" onclick="delTask(${t.id})">✖</button>
+    </div>`).join('')+`<div style="text-align:center;font-size:11.5px;color:var(--muted);margin-top:12px">${pend} متبقية من ${rows.length}</div>`
+   :'<div class="spin">لا مهام — أضف أول مهمة</div>';
+}
+async function addTask(){
+  const t=$('ntkTitle').value.trim();
+  if(!t)return msg('tkMsg','اكتب المهمة أولاً','err');
+  const row={owner_id:profile.id,title:t,kind:ntkKind};
+  if(ntkKind==='weekly')row.weekday=parseInt($('ntkWeekday').value);
+  if(ntkKind==='once'&&$('ntkDue').value)row.due_date=$('ntkDue').value;
+  const{error}=await db.from('sup_tasks').insert(row);
+  if(error)return msg('tkMsg','خطأ في الإضافة','err');
+  $('ntkTitle').value='';$('ntkDue').value='';
+  msg('tkMsg','تمت الإضافة ✅','ok');
+  loadTasks();
+}
+async function toggleTask(id,isDone){
+  const{error}=await db.from('sup_tasks').update({done:!isDone}).eq('id',id);
+  if(error)return msg('tkMsg','خطأ — حاول مجدداً','err');
+  loadTasks();
+}
+async function delTask(id){
+  if(!confirm('حذف هذه المهمة؟'))return;
+  await db.from('sup_tasks').delete().eq('id',id);
+  loadTasks();
+}
+async function resetTasks(){
+  if(!confirm('إزالة كل العلامات؟ (المهام تبقى)'))return;
+  const{error}=await db.from('sup_tasks').update({done:false}).eq('owner_id',profile.id).eq('done',true);
+  if(error)return msg('tkMsg','خطأ في إعادة التعيين','err');
+  msg('tkMsg','تمت إعادة التعيين ↻','ok');
+  loadTasks();
 }
 
 // Enter keys + session restore

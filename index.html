@@ -382,6 +382,17 @@
         <button onclick="saveTargets()" id="tgBtn">حفظ الأهداف 🎯</button>
         <div class="msg" id="tgMsg"></div>
       </div>
+      <div id="usrManage" class="card hidden">
+        <h2>👥 المستخدمون وأرقام الدخول</h2>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:4px">كلمة المرور مشفّرة ولا يمكن عرضها — تُعاد فقط من لوحة Supabase</p>
+        <div id="usrList"><div class="spin">جاري التحميل...</div></div>
+        <button onclick="genRosterMsg()" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">توليد قائمة الأرقام 📋</button>
+        <div id="usrMsgWrap" class="hidden">
+          <textarea id="usrBox" style="min-height:200px;margin-top:10px;font-size:13px;direction:ltr;font-family:monospace"></textarea>
+          <button onclick="copyText('usrBox',this)">نسخ 📋</button>
+        </div>
+        <div class="msg" id="usrMsg"></div>
+      </div>
       <div id="tpManage" class="card hidden">
         <h2>🏪 إدارة المواقع</h2>
         <div id="tpList"></div>
@@ -1121,7 +1132,7 @@ async function loadDashLists(city,start){
   loadStockView(city,start);
   loadCheckView(city);
   loadSalesFeed(city,start);
-  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager();$('routePlan').classList.remove('hidden');initRoutePlan();$('tasksCard').classList.remove('hidden');if(!window.tkLoaded){window.tkLoaded=true;buildTaskUI();loadTasks()}}
+  if(profile.role==='supervisor'){$('clManage').classList.remove('hidden');loadClManager();$('tpManage').classList.remove('hidden');loadTpManager();$('routePlan').classList.remove('hidden');initRoutePlan();$('tasksCard').classList.remove('hidden');if(!window.tkLoaded){window.tkLoaded=true;buildTaskUI();loadTasks()}$('usrManage').classList.remove('hidden');loadUsers()}
 }
 // device / colour breakdown for the period
 function renderDevBreak(sales){
@@ -1194,7 +1205,7 @@ async function exportCSV(){
 function genSummary(){
   const d=window.dashData;if(!d)return;
   const lbl=staffPeriod==='today'?'Daily':staffPeriod==='week'?'Weekly':'Monthly';
-  const lines=[`DaTracker — ${d.city} · ${lbl} Summary`,`${d.start} → ${todayStr()}`,''];
+  const lines=[`DaTracker — ${d.city} · ${lbl} Summary`,`${d.start} - ${todayStr()}`,''];
   let sk=0,mgm=0,ld=0;Object.values(d.by).forEach(v=>{sk+=v.sk;mgm+=v.mgm;ld+=v.ld});
   lines.push(`LAS sales : ${d.las}`);
   lines.push(`Total activity : ${d.total} (LAU included: ${d.lau})`);
@@ -1358,10 +1369,7 @@ async function saveRoutePlan(){
 function genRouteMsg(){
   const dt=$('rpDate').value;
   const parts=dt.split('-'),y=parts[0],mo=parts[1],dd=parts[2];
-  const DAY_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const dayName=DAY_EN[new Date(dt+'T12:00:00').getDay()];
   const name2=id=>{const p=rpPromoters.find(x=>String(x.id)===String(id));return p?p.full_name:'?'};
-  const short=tp=>(tp.name.split('_')[1]||tp.name).trim();
   const picks=rpPicks();
   // group promoters under their outlet + shift
   const byTp={};
@@ -1370,58 +1378,47 @@ function genRouteMsg(){
     byTp[a.tp]=byTp[a.tp]||{day:[],night:[]};
     byTp[a.tp][a.shift].push(name2(pid));
   });
-  const activeIds=new Set(),dsActiveIds=new Set();
-  Object.keys(picks).forEach(pid=>{
-    const a=picks[pid];if(!a.tp)return;
-    const tp=rpOutlets.find(t=>t.id===a.tp);
-    (tp&&tp.is_ds?dsActiveIds:activeIds).add(String(pid));
-  });
-  const block=(tp,i)=>{
-    const g=byTp[tp.id];
-    const b=['*'+i+'. '+short(tp)+'*'];
-    if(tp.unicode)b.push('🔢 '+tp.unicode);
-    b.push('🏷 '+tp.name);
-    if(g.day.length)b.push('☀️ Day   : '+g.day.join(' / '));
-    if(g.night.length)b.push('🌙 Night : '+g.night.join(' / '));
-    if(tp.maps_url)b.push('🗺 '+tp.maps_url);
-    return b.join('\n');
-  };
-  const norm=[],ds=[];
+  const norm=[],ds=[];let active=0;
   rpOutlets.forEach(tp=>{
     const g=byTp[tp.id];
     if(!g||(!g.day.length&&!g.night.length))return;
     (tp.is_ds?ds:norm).push(tp);
   });
+  Object.keys(picks).forEach(pid=>{if(picks[pid].tp)active++});
   if(!norm.length&&!ds.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
-  const SEP='━━━━━━━━━━━━━━━';
-  const L=[];
-  L.push('*'+String(profile.city).toUpperCase()+' — ROUTE PLAN*');
-  L.push('🗓 '+dayName+' · '+dd+'/'+mo+'/'+y);
-  L.push(SEP);
-  if(norm.length){
-    L.push('');
-    norm.forEach((tp,k)=>{L.push(block(tp,k+1));L.push('')});
-  }
-  if(ds.length){
-    L.push(SEP);
-    L.push('*DIRECT SALES — DS*');
-    L.push('');
-    ds.forEach((tp,k)=>{L.push(block(tp,k+1));L.push('')});
-  }
-  // everyone not on an outlet: explicit status, or Off by default
+  const BRK='==========';
+  // unicode / name / url, blank line, then a line per shift the outlet runs
+  const block=tp=>{
+    const g=byTp[tp.id]||{day:[],night:[]};
+    const b=[];
+    if(tp.unicode)b.push(tp.unicode);
+    b.push(tp.name);
+    if(tp.maps_url)b.push(tp.maps_url);
+    b.push('');
+    tpShifts(tp).forEach(sh=>b.push((sh==='day'?'Day':'Night')+' : '+(g[sh].length?g[sh].join(' / '):'')));
+    return b.join('\n');
+  };
   const offList=rpPromoters.filter(p=>!picks[p.id]||picks[p.id].status)
     .map(p=>({n:p.full_name,s:picks[p.id]&&picks[p.id].status?PLAN_STATUS_EN[picks[p.id].status]:'Off'}));
-  L.push(SEP);
-  const tally=['✅ Active : '+activeIds.size];
-  if(ds.length)tally.push('🏷 DS : '+dsActiveIds.size);
-  tally.push('🌴 Off : '+offList.length);
-  L.push(tally.join('   ·   '));
-  if(offList.length){
+  const L=[];
+  L.push(profile.city+' RP');
+  L.push(dd+'/'+mo+'/'+y);
+  L.push('');
+  L.push('');
+  if(norm.length)L.push(norm.map(block).join('\n\n'+BRK+'\n\n'));
+  if(ds.length){
     L.push('');
-    L.push('*OFF / LEAVE*');
-    offList.forEach(o=>L.push('• '+o.n+' — '+o.s));
+    L.push('====DS====');
+    L.push('');
+    L.push(ds.map(block).join('\n\n'+BRK+'\n\n'));
   }
-  $('rpBox').value=L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  L.push('');
+  L.push(BRK);
+  L.push('');
+  L.push('Total active : '+active);
+  L.push('Inactive : '+offList.length);
+  offList.forEach(o=>L.push(o.n+' ::: '+o.s));
+  $('rpBox').value=L.join('\n');
   $('rpMsgWrap').classList.remove('hidden');
 }
 async function supDelAtt(id){
@@ -1687,6 +1684,67 @@ async function resetTasks(){
   if(error)return msg('tkMsg','خطأ في إعادة التعيين','err');
   msg('tkMsg','تمت إعادة التعيين ↻','ok');
   loadTasks();
+}
+
+// ---- USERS / LOGIN NUMBERS (passwords are hashed and can never be shown) ----
+const ROLE_AR={promoter:'مندوب',supervisor:'مشرف',manager:'مدير'};
+let usrCache=[];
+async function loadUsers(){
+  const{data,error}=await db.from('users').select('id,full_name,role,city,active,login_no')
+    .eq('city',profile.city).order('role').order('full_name');
+  if(error)return $('usrList').innerHTML='<div class="spin">أضف عمود login_no أولاً</div>';
+  usrCache=data||[];
+  const esc=s=>String(s??'').replace(/"/g,'&quot;');
+  $('usrList').innerHTML=usrCache.length?usrCache.map(u=>`
+    <div class="sale-item" style="display:block;${u.active?'':'opacity:.45'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="min-width:0"><b>${u.full_name}</b>
+          <div class="meta"><span dir="ltr">${u.login_no||'—'}</span> · ${ROLE_AR[u.role]||u.role} · ${u.active?'نشط':'موقوف'}</div>
+        </div>
+        <span style="display:flex;gap:6px;flex-shrink:0">
+          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="editUsr(${JSON.stringify(u.id)})">✏️</button>
+          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none" onclick="toggleUsr(${JSON.stringify(u.id)},${!u.active})">${u.active?'إيقاف':'تفعيل'}</button>
+        </span>
+      </div>
+      <div id="us-${u.id}" class="hidden" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)">
+        <label style="margin:4px 0 4px">الاسم الكامل</label>
+        <input type="text" id="us-name-${u.id}" value="${esc(u.full_name)}" style="text-align:right;letter-spacing:0;font-size:13px">
+        <label style="margin:10px 0 4px">رقم الدخول (4 أرقام)</label>
+        <input type="tel" inputmode="numeric" maxlength="4" id="us-no-${u.id}" value="${esc(u.login_no)}" style="text-align:center;font-size:13px">
+        <p style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">🔒 كلمة المرور تُعاد من Supabase → Authentication → Users → إعادة تعيين</p>
+        <button style="margin-top:8px" onclick="saveUsr(${JSON.stringify(u.id)})">حفظ ✅</button>
+      </div>
+    </div>`).join(''):'<div class="spin">لا مستخدمين</div>';
+}
+function editUsr(id){$('us-'+id).classList.toggle('hidden')}
+async function saveUsr(id){
+  const name=$('us-name-'+id).value.trim();
+  if(!name)return msg('usrMsg','الاسم مطلوب','err');
+  const no=$('us-no-'+id).value.trim();
+  const{error}=await db.from('users').update({full_name:name,login_no:no||null}).eq('id',id);
+  if(error)return msg('usrMsg','لا تملك صلاحية التعديل — شغّل سكربت الصلاحيات','err');
+  msg('usrMsg','تم الحفظ ✅ — رقم الدخول هنا للعرض فقط، غيّر البريد في Supabase ليعمل','ok');
+  loadUsers();rpInited=false;
+}
+async function toggleUsr(id,active){
+  const{error}=await db.from('users').update({active}).eq('id',id);
+  if(error)return msg('usrMsg','لا تملك صلاحية التعديل','err');
+  loadUsers();rpInited=false;
+}
+function genRosterMsg(){
+  const d=todayStr().split('-');
+  const L=[profile.city+' - TEAM LOGINS',d[2]+'/'+d[1]+'/'+d[0],'==========',''];
+  ['promoter','supervisor','manager'].forEach(r=>{
+    const g=usrCache.filter(u=>u.role===r&&u.active);
+    if(!g.length)return;
+    L.push(ROLE_AR[r]||r);
+    g.forEach(u=>L.push('• '+u.full_name+' — '+(u.login_no||'—')));
+    L.push('');
+  });
+  L.push('==========');
+  L.push('Passwords are not listed here.');
+  $('usrBox').value=L.join('\n').trim();
+  $('usrMsgWrap').classList.remove('hidden');
 }
 
 // Enter keys + session restore

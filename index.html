@@ -1338,32 +1338,49 @@ function rpPicks(){
   return out;
 }
 async function saveRoutePlan(){
-  $('rpBtn').disabled=true;
   const dt=$('rpDate').value;
+  if(!dt)return msg('rpMsg','اختر تاريخ الخطة أولاً','err');
   const picks=rpPicks();
-  const rows=Object.keys(picks).map(pid=>{
+  const pidList=Object.keys(picks);
+  // validate BEFORE touching the database
+  const slot={};
+  for(const pid of pidList){
+    const a=picks[pid];if(!a.tp)continue;
+    const k=a.tp+'-'+a.shift;
+    if(slot[k]){
+      const tp=rpOutlets.find(t=>t.id===a.tp);
+      const nm=tp?(tp.name.split('_')[1]||tp.name):'';
+      return msg('rpMsg',`${nm} — ${SHIFT_AR[a.shift]} معيّن له أكثر من مندوب`,'err');
+    }
+    slot[k]=pid;
+  }
+  $('rpBtn').disabled=true;
+  const rows=pidList.map(pid=>{
     const a=picks[pid];
     return a.status
       ?{plan_date:dt,promoter_id:pid,touch_point_id:null,shift:null,status:a.status,created_by:profile.id}
       :{plan_date:dt,promoter_id:pid,touch_point_id:a.tp,shift:a.shift,status:null,created_by:profile.id};
   });
-  // replace this day's plan for the promoters shown
-  const ids=rpPromoters.map(p=>p.id);
-  if(ids.length)await db.from('route_plans').delete().eq('plan_date',dt).in('promoter_id',ids);
+  // write first, clear second — a failed write can no longer destroy the existing plan
   if(rows.length){
-    const{error}=await db.from('route_plans').insert(rows);
-    if(error){$('rpBtn').disabled=false;return msg('rpMsg','خطأ في الحفظ — شغّل سكربت الخطة أولاً','err')}
+    const{error}=await db.from('route_plans').upsert(rows,{onConflict:'plan_date,promoter_id'});
+    if(error){
+      $('rpBtn').disabled=false;
+      const m=String(error.message||'');
+      if(error.code==='42P10')return msg('rpMsg','شغّل سكربت الخطة في Supabase أولاً (الفهرس الفريد مفقود)','err');
+      if(error.code==='PGRST204'||/status/i.test(m))return msg('rpMsg','شغّل سكربت الخطة في Supabase أولاً (عمود status مفقود)','err');
+      if(error.code==='23505')return msg('rpMsg','تعارض: موقع وفترة معيّن لهما أكثر من مندوب','err');
+      if(error.code==='23514')return msg('rpMsg','قيمة غير مقبولة — راجع سكربت الخطة','err');
+      return msg('rpMsg','خطأ في الحفظ: '+m,'err');
+    }
+  }
+  // remove promoters that were set back to "بدون"
+  const cleared=rpPromoters.filter(p=>!picks[p.id]).map(p=>p.id);
+  if(cleared.length){
+    const{error:de}=await db.from('route_plans').delete().eq('plan_date',dt).in('promoter_id',cleared);
+    if(de){$('rpBtn').disabled=false;return msg('rpMsg','حُفظت التعيينات لكن تعذّر مسح المندوبين المستبعدين','err')}
   }
   $('rpBtn').disabled=false;
-  // soft warning: same outlet+shift given to more than one promoter
-  const slot={};let clash=null;
-  Object.keys(picks).forEach(pid=>{
-    const a=picks[pid];if(!a.tp)return;
-    const k=a.tp+'-'+a.shift;
-    if(slot[k]){const tp=rpOutlets.find(t=>t.id===a.tp);clash=(tp?(tp.name.split('_')[1]||tp.name):'')+' — '+SHIFT_AR[a.shift]}
-    slot[k]=true;
-  });
-  if(clash)return msg('rpMsg',`حُفظت الخطة ✅ — تنبيه: ${clash} فيه أكثر من مندوب`,'err');
   msg('rpMsg',`حُفظت خطة ${dt} (${rows.length} تعيين) ✅`,'ok');
 }
 function genRouteMsg(){
@@ -1371,31 +1388,34 @@ function genRouteMsg(){
   const parts=dt.split('-'),y=parts[0],mo=parts[1],dd=parts[2];
   const name2=id=>{const p=rpPromoters.find(x=>String(x.id)===String(id));return p?p.full_name:'?'};
   const picks=rpPicks();
-  // group promoters under their outlet + shift
   const byTp={};
   Object.keys(picks).forEach(pid=>{
     const a=picks[pid];if(!a.tp)return;
     byTp[a.tp]=byTp[a.tp]||{day:[],night:[]};
     byTp[a.tp][a.shift].push(name2(pid));
   });
-  const norm=[],ds=[];let active=0;
+  const norm=[],ds=[];
   rpOutlets.forEach(tp=>{
     const g=byTp[tp.id];
     if(!g||(!g.day.length&&!g.night.length))return;
     (tp.is_ds?ds:norm).push(tp);
   });
-  Object.keys(picks).forEach(pid=>{if(picks[pid].tp)active++});
   if(!norm.length&&!ds.length)return msg('rpMsg','عيّن مندوباً واحداً على الأقل أولاً','err');
+  // count only what actually prints, so the total always matches the list
+  let active=0;
+  norm.concat(ds).forEach(tp=>{const g=byTp[tp.id];active+=g.day.length+g.night.length});
   const BRK='==========';
-  // unicode / name / url, blank line, then a line per shift the outlet runs
   const block=tp=>{
     const g=byTp[tp.id]||{day:[],night:[]};
+    // shifts the outlet runs, plus any shift that actually has someone on it
+    const cfg=tpShifts(tp);
+    const show=['day','night'].filter(sh=>cfg.includes(sh)||g[sh].length);
     const b=[];
     if(tp.unicode)b.push(tp.unicode);
     b.push(tp.name);
     if(tp.maps_url)b.push(tp.maps_url);
     b.push('');
-    tpShifts(tp).forEach(sh=>b.push((sh==='day'?'Day':'Night')+' : '+(g[sh].length?g[sh].join(' / '):'')));
+    show.forEach(sh=>b.push((sh==='day'?'Day':'Night')+' : '+(g[sh].length?g[sh].join(' / '):'')));
     return b.join('\n');
   };
   const offList=rpPromoters.filter(p=>!picks[p.id]||picks[p.id].status)
@@ -1407,7 +1427,7 @@ function genRouteMsg(){
   L.push('');
   if(norm.length)L.push(norm.map(block).join('\n\n'+BRK+'\n\n'));
   if(ds.length){
-    L.push('');
+    if(norm.length){L.push('');L.push('')}
     L.push('====DS====');
     L.push('');
     L.push(ds.map(block).join('\n\n'+BRK+'\n\n'));
@@ -1702,8 +1722,8 @@ async function loadUsers(){
           <div class="meta"><span dir="ltr">${u.login_no||'—'}</span> · ${ROLE_AR[u.role]||u.role} · ${u.active?'نشط':'موقوف'}</div>
         </div>
         <span style="display:flex;gap:6px;flex-shrink:0">
-          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="editUsr(${JSON.stringify(u.id)})">✏️</button>
-          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none" onclick="toggleUsr(${JSON.stringify(u.id)},${!u.active})">${u.active?'إيقاف':'تفعيل'}</button>
+          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="editUsr('${u.id}')">✏️</button>
+          <button style="width:auto;margin:0;padding:6px 9px;font-size:11px;background:transparent;border:1px solid var(--line);color:var(--muted);box-shadow:none" onclick="toggleUsr('${u.id}',${!u.active})">${u.active?'إيقاف':'تفعيل'}</button>
         </span>
       </div>
       <div id="us-${u.id}" class="hidden" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)">
@@ -1712,7 +1732,7 @@ async function loadUsers(){
         <label style="margin:10px 0 4px">رقم الدخول (4 أرقام)</label>
         <input type="tel" inputmode="numeric" maxlength="4" id="us-no-${u.id}" value="${esc(u.login_no)}" style="text-align:center;font-size:13px">
         <p style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">🔒 كلمة المرور تُعاد من Supabase → Authentication → Users → إعادة تعيين</p>
-        <button style="margin-top:8px" onclick="saveUsr(${JSON.stringify(u.id)})">حفظ ✅</button>
+        <button style="margin-top:8px" onclick="saveUsr('${u.id}')">حفظ ✅</button>
       </div>
     </div>`).join(''):'<div class="spin">لا مستخدمين</div>';
 }

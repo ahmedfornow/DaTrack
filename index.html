@@ -100,6 +100,15 @@
   .pill{font-size:10px;padding:3px 8px;border-radius:99px;background:rgba(216,189,132,.1);color:var(--gold);border:1px solid var(--line-soft);white-space:nowrap;flex-shrink:0}
   .pill.due{background:rgba(229,96,79,.12);color:var(--red);border-color:rgba(229,96,79,.28)}
   .dayq{display:flex;gap:8px;margin-top:6px}
+  #workScreen .opt-btn,#signinCard .opt-btn{padding:15px 8px;font-size:14.5px;border-radius:13px}
+  #workScreen button,#signinCard button{padding:16px;font-size:16px;border-radius:13px}
+  #workScreen .tab,#signinCard .tab{padding:14px 4px;font-size:13.5px}
+  #workScreen label,#signinCard label{font-size:13.5px;margin:16px 0 6px}
+  .step{display:inline-flex;width:20px;height:20px;border-radius:50%;background:rgba(216,189,132,.14);color:var(--gold);font-size:11px;align-items:center;justify-content:center;margin-left:7px;font-weight:700}
+  .step.on{background:var(--gold);color:#12100a}
+  .pick{background:var(--card2);border:1px dashed var(--line);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13.5px;text-align:center;color:var(--muted);line-height:1.7}
+  .pick b{color:var(--gold)}
+  .more{display:block;text-align:center;color:var(--gold);font-size:13px;margin-top:12px;cursor:pointer;text-decoration:underline}
   .dayq .opt-btn{padding:10px 6px;font-size:13px}
 </style>
 </head>
@@ -122,13 +131,16 @@
   <div class="card hidden" id="signinCard">
     <div class="welcome">حياك الله 👋</div>
     <div class="pname" id="promoName">—</div>
-    <label>يوم الجلسة</label>
-    <div class="dayq">
-      <div class="opt-btn active" id="dqToday" onclick="quickDay(0)">اليوم</div>
-      <div class="opt-btn" id="dqYest" onclick="quickDay(1)">أمس</div>
+    <div id="dayHint" style="font-size:12.5px;color:var(--muted);margin-top:8px;text-align:center;line-height:1.6"></div>
+    <span class="more" id="dayToggle" onclick="toggleDayPicker()">تسجيل يوم سابق؟</span>
+    <div id="dayPick" class="hidden">
+      <label>يوم الجلسة</label>
+      <div class="dayq">
+        <div class="opt-btn active" id="dqToday" onclick="quickDay(0)">اليوم</div>
+        <div class="opt-btn" id="dqYest" onclick="quickDay(1)">أمس</div>
+      </div>
+      <input type="date" id="signinDate" style="text-align:center;margin-top:8px" onchange="setSigninDate(this.value)">
     </div>
-    <input type="date" id="signinDate" style="text-align:center;margin-top:8px" onchange="setSigninDate(this.value)">
-    <div id="dayHint" style="font-size:11.5px;color:var(--muted);margin-top:7px;text-align:center;line-height:1.5"></div>
     <label>حالة اليوم</label>
     <div class="opt-grid" id="statusGrid" style="grid-template-columns:1fr 1fr 1fr"></div>
     <div id="tpWrap">
@@ -190,7 +202,9 @@
         <div class="opt-grid" id="typeGrid"></div>
         <label>العميل</label>
         <div class="opt-grid" id="custGrid"></div>
+        <div class="pick" id="salePick">اختر الجهاز للبدء</div>
         <button id="saleBtn" onclick="submitSale()">تسجيل البيع ✅</button>
+        <button id="repeatBtn" class="hidden" onclick="repeatLast()" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">كرر آخر عملية ↺</button>
         <div class="msg" id="saleMsg"></div>
       </div>
       <div class="card">
@@ -386,6 +400,15 @@
         <h2>👥 المستخدمون وأرقام الدخول</h2>
         <p style="font-size:12px;color:var(--muted);margin-bottom:4px">كلمة المرور مشفّرة ولا يمكن عرضها — تُعاد فقط من لوحة Supabase</p>
         <div id="usrList"><div class="spin">جاري التحميل...</div></div>
+        <div id="spareWrap" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line-soft)">
+          <label>إضافة مندوب — تفعيل حساب شاغر</label>
+          <select id="spareSel"></select>
+          <input type="text" id="spareName" style="text-align:right;letter-spacing:0;margin-top:8px" placeholder="اسم المندوب الجديد">
+          <button onclick="claimSpare()">تفعيل المندوب ➕</button>
+        </div>
+        <div id="spareNone" class="hidden" style="font-size:12px;color:var(--muted);margin-top:14px;padding-top:14px;border-top:1px solid var(--line-soft);line-height:1.8">
+          لا توجد حسابات شاغرة. أنشئ حسابات إضافية من Supabase ← Authentication ← Add user، ثم ستظهر هنا للتفعيل.
+        </div>
         <button onclick="genRosterMsg()" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none">توليد قائمة الأرقام 📋</button>
         <div id="usrMsgWrap" class="hidden">
           <textarea id="usrBox" style="min-height:200px;margin-top:10px;font-size:13px;direction:ltr;font-family:monospace"></textarea>
@@ -497,6 +520,7 @@ async function route(){
   if(!user)return show('loginCard');
   const{data:prof}=await db.from('users').select('*').eq('id',user.id).single();
   if(!prof){msg('loginMsg','حسابك غير مسجل — كلّم المشرف','err');await db.auth.signOut();return show('loginCard')}
+  if(prof.active===false){msg('loginMsg','حسابك موقوف — كلّم المشرف','err');await db.auth.signOut();return show('loginCard')}
   profile=prof;
   if(prof.role==='promoter')return promoterFlow();
   return staffFlow();
@@ -647,17 +671,42 @@ function buildSaleUI(){
   $('typeGrid').innerHTML=TYPES.map(t=>`<div class="opt-btn" onclick="pickOpt('type','${t}')" id="type-${t}">${t}</div>`).join('');
   $('custGrid').innerHTML=CUSTS.map(c=>`<div class="opt-btn" onclick="pickOpt('cust','${c}')" id="cust-${c}">${c}</div>`).join('');
   $('colorGrid').innerHTML='<div class="spin">اختر الجهاز أولاً</div>';
+  paintPick();
+}
+function toggleDayPicker(){
+  const b=$('dayPick').classList.toggle('hidden');
+  $('dayToggle').textContent=b?'تسجيل يوم سابق؟':'إخفاء';
 }
 function pickDev(d){
   sel.dev=d;sel.color=null;
   Object.keys(DEVICES).forEach(x=>$('dev-'+DEV_SHORT[x]).classList.toggle('active',x===d));
   $('colorGrid').innerHTML=DEVICES[d].map(c=>`<div class="opt-btn" onclick="pickColor('${c}')">${c}</div>`).join('');
+  paintPick();
 }
-function pickColor(c){sel.color=c;document.querySelectorAll('#colorGrid .opt-btn').forEach(b=>b.classList.toggle('active',b.textContent===c))}
+function pickColor(c){sel.color=c;document.querySelectorAll('#colorGrid .opt-btn').forEach(b=>b.classList.toggle('active',b.textContent===c));paintPick()}
+function paintPick(){
+  const el=$('salePick');if(!el)return;
+  if(!sel.dev)return el.innerHTML='اختر الجهاز للبدء';
+  const bits=[`<b>${DEV_SHORT[sel.dev]||sel.dev}</b>`];
+  bits.push(sel.color?`<b>${sel.color}</b>`:'اللون؟');
+  bits.push(sel.type?`<b>${sel.type}</b>`:'نوع البيع؟');
+  bits.push(sel.cust?`<b>${sel.cust}</b>`:'العميل؟');
+  el.innerHTML=bits.join(' · ');
+}
+function repeatLast(){
+  const l=window.lastSale;if(!l)return;
+  sel={dev:l.device_type,color:l.color,type:l.sale_type,cust:l.customer_type};
+  buildSaleUI();
+  const ds=$('dev-'+DEV_SHORT[sel.dev]);if(ds)ds.classList.add('active');
+  $('colorGrid').innerHTML=DEVICES[sel.dev].map(c=>`<div class="opt-btn ${c===sel.color?'active':''}" onclick="pickColor('${c}')">${c}</div>`).join('');
+  TYPES.forEach(x=>$('type-'+x).classList.toggle('active',x===sel.type));
+  CUSTS.forEach(x=>$('cust-'+x).classList.toggle('active',x===sel.cust));
+  paintPick();
+}
 function pickOpt(k,v){
   if(k==='type'&&(v==='MGM'||v==='SK+MGM')&&sel.cust==='LAU')return msg('saleMsg','عروض MGM لعملاء LAS فقط','err');
   if(k==='cust'&&v==='LAU'&&(sel.type==='MGM'||sel.type==='SK+MGM')){sel.type=null;TYPES.forEach(x=>$('type-'+x).classList.remove('active'))}
-  sel[k]=v;const list=k==='type'?TYPES:CUSTS;list.forEach(x=>$(k+'-'+x).classList.toggle('active',x===v));
+  sel[k]=v;const list=k==='type'?TYPES:CUSTS;list.forEach(x=>$(k+'-'+x).classList.toggle('active',x===v));paintPick();
 }
 async function loadMyTarget(){
   const{data}=await db.from('targets').select('daily_target,gt_target')
@@ -677,6 +726,8 @@ async function submitSale(){
   $('saleBtn').disabled=false;
   if(error)return msg('saleMsg','خطأ في التسجيل','err');
   msg('saleMsg','تم تسجيل البيع 🎉','ok');
+  window.lastSale={device_type:sel.dev,color:sel.color,sale_type:sel.type,customer_type:sel.cust};
+  $('repeatBtn').classList.remove('hidden');
   sel={dev:null,color:null,type:null,cust:null};
   buildSaleUI();loadTodaySales();loadMyAnalytics();
 }
@@ -1715,6 +1766,11 @@ async function loadUsers(){
   if(error)return $('usrList').innerHTML='<div class="spin">أضف عمود login_no أولاً</div>';
   usrCache=data||[];
   const esc=s=>String(s??'').replace(/"/g,'&quot;');
+  // a "spare" is an inactive promoter row not yet assigned to a real person
+  const spares=usrCache.filter(u=>u.role==='promoter'&&!u.active);
+  $('spareWrap').classList.toggle('hidden',!spares.length);
+  $('spareNone').classList.toggle('hidden',!!spares.length);
+  if(spares.length)$('spareSel').innerHTML=spares.map(u=>`<option value="${u.id}">${u.login_no||'—'} — ${u.full_name}</option>`).join('');
   $('usrList').innerHTML=usrCache.length?usrCache.map(u=>`
     <div class="sale-item" style="display:block;${u.active?'':'opacity:.45'}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -1735,6 +1791,17 @@ async function loadUsers(){
         <button style="margin-top:8px" onclick="saveUsr('${u.id}')">حفظ ✅</button>
       </div>
     </div>`).join(''):'<div class="spin">لا مستخدمين</div>';
+}
+async function claimSpare(){
+  const id=$('spareSel').value;
+  const name=$('spareName').value.trim();
+  if(!id)return msg('usrMsg','لا يوجد حساب شاغر','err');
+  if(!name)return msg('usrMsg','اكتب اسم المندوب','err');
+  const{error}=await db.from('users').update({full_name:name,active:true,city:profile.city}).eq('id',id);
+  if(error)return msg('usrMsg','لا تملك صلاحية التعديل — شغّل سكربت الصلاحيات','err');
+  $('spareName').value='';
+  msg('usrMsg','تم تفعيل المندوب ✅ — غيّر كلمة مروره من Supabase','ok');
+  loadUsers();rpInited=false;
 }
 function editUsr(id){$('us-'+id).classList.toggle('hidden')}
 async function saveUsr(id){

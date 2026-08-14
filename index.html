@@ -382,7 +382,7 @@
         <button onclick="saveRoutePlan()" id="rpBtn">حفظ الخطة 🗺️</button>
         <button class="ghost" style="background:transparent;border:1px solid var(--gold);color:var(--gold);box-shadow:none" onclick="genRouteMsg()">توليد رسالة الخطة 📋</button>
         <div id="rpMsgWrap" class="hidden">
-          <textarea id="rpBox" style="width:100%;min-height:220px;margin-top:10px;padding:12px;border-radius:11px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;text-align:right"></textarea>
+          <textarea id="rpBox" style="width:100%;min-height:260px;margin-top:10px;padding:12px;border-radius:11px;border:1px solid #2f3b4a;background:var(--card2);color:var(--text);font-size:13px;direction:ltr;text-align:left;font-family:monospace;white-space:pre"></textarea>
           <button onclick="copyText('rpBox',this)">نسخ للواتساب 📋</button>
         </div>
         <div class="msg" id="rpMsg"></div>
@@ -491,6 +491,9 @@ const todayStr=()=>bizNow().toISOString().slice(0,10);
 const SHIFT_AR={day:'نهاري ☀️',night:'ليلي 🌙'};
 function tpMode(tp){return tp&&tp.shift_mode?tp.shift_mode:(tp&&tp.dual_shift?'dual':'day');}
 function tpShifts(tp){const m=tpMode(tp);return m==='dual'?['day','night']:[m];}
+// outlet fields must be single-line — blocks pasted page text from ever being stored or printed
+const oneLine=(s,max)=>String(s??'').replace(/\s+/g,' ').trim().slice(0,max||80);
+const firstUrl=s=>{const m=String(s??'').match(/https?:\/\/[^\s]+/);return m?m[0]:''};
 
 let profile=null, touchPoints=[], chosenShift='day', chosenStatus='work';
 let signinDate=null, daySessions=[];
@@ -1425,6 +1428,8 @@ async function saveRoutePlan(){
       if(error.code==='PGRST204'||/status/i.test(m))return msg('rpMsg','شغّل سكربت الخطة في Supabase أولاً (عمود status مفقود)','err');
       if(error.code==='23505')return msg('rpMsg','تعارض: موقع وفترة معيّن لهما أكثر من مندوب','err');
       if(error.code==='23514')return msg('rpMsg','قيمة غير مقبولة — راجع سكربت الخطة','err');
+      if(error.code==='42501'||/row-level security/i.test(m))return msg('rpMsg','صلاحيات RLS ترفض الحفظ — شغّل سكربت صلاحيات route_plans في Supabase','err');
+      if(error.code==='23503')return msg('rpMsg','مرجع غير موجود — حدّث الصفحة وأعد المحاولة','err');
       return msg('rpMsg','خطأ في الحفظ: '+m,'err');
     }
   }
@@ -1465,9 +1470,10 @@ function genRouteMsg(){
     const cfg=tpShifts(tp);
     const show=['day','night'].filter(sh=>cfg.includes(sh)||g[sh].length);
     const b=[];
-    if(tp.unicode)b.push(tp.unicode);
-    b.push(tp.name);
-    if(tp.maps_url)b.push(tp.maps_url);
+    const uni=oneLine(tp.unicode,24),nm=oneLine(tp.name,70),url=firstUrl(tp.maps_url);
+    if(uni)b.push(uni);
+    b.push(nm);
+    if(url)b.push(url);
     b.push('');
     show.forEach(sh=>b.push((sh==='day'?'Day':'Night')+' : '+(g[sh].length?g[sh].join(' / '):'')));
     return b.join('\n');
@@ -1575,14 +1581,16 @@ function edRows(id,mode){
 function editTp(id){$('ed-'+id).classList.toggle('hidden')}
 async function saveTpEdit(id){
   const cur=tpCache.find(x=>x.id===id)||{};
-  const name=$('ed-name-'+id).value.trim();
+  const name=oneLine($('ed-name-'+id).value,70);
   if(!name)return msg('tpMsg','الاسم مطلوب','err');
+  const rawUrl=$('ed-maps-'+id).value.trim(),cleanUrl=firstUrl(rawUrl);
+  if(rawUrl&&!cleanUrl)return msg('tpMsg','رابط الخريطة غير صالح — يجب أن يبدأ بـ https://','err');
   const mode=edModeVal[id]||tpMode(cur);
   const isDs=edDsVal[id]!==undefined?edDsVal[id]:!!cur.is_ds;
   const{error}=await db.from('touch_points').update({
     name,
-    unicode:$('ed-code-'+id).value.trim()||null,
-    maps_url:$('ed-maps-'+id).value.trim()||null,
+    unicode:oneLine($('ed-code-'+id).value,24)||null,
+    maps_url:cleanUrl||null,
     shift_mode:mode,
     dual_shift:mode==='dual',
     is_ds:isDs
@@ -1606,9 +1614,10 @@ async function saveTpEdit(id){
   loadTpManager();window.tgLoaded=false;loadTargetsEditor();window.tgLoaded=true;rpInited=false;
 }
 async function addTp(){
-  const n=$('ntpName').value.trim();
-  const m=$('ntpMaps').value.trim();
-  const code=$('ntpCode').value.trim();
+  const n=oneLine($('ntpName').value,70);
+  const m=firstUrl($('ntpMaps').value);
+  const code=oneLine($('ntpCode').value,24);
+  if($('ntpMaps').value.trim()&&!m)return msg('tpMsg','رابط الخريطة غير صالح — يجب أن يبدأ بـ https://','err');
   if(!n)return msg('tpMsg','اكتب اسم الموقع','err');
   const{data:newTp,error}=await db.from('touch_points').insert({name:n,unicode:code||null,maps_url:m||null,shift_mode:ntpModeVal,dual_shift:ntpModeVal==='dual',is_ds:ntpDsVal,city:profile.city}).select().single();
   if(error){

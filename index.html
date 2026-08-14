@@ -918,7 +918,8 @@ function genStockMsg(){
 async function loadChecklist(){
   const{data:items}=await db.from('checklist_items').select('*').eq('active',true).order('sort_order');
   checkItems=items||[];
-  const{data:resp}=await db.from('checklist_responses').select('*').eq('promoter_id',profile.id).eq('work_date',todayStr());
+  const wd=session?session.work_date:todayStr();
+  const{data:resp}=await db.from('checklist_responses').select('*').eq('promoter_id',profile.id).eq('work_date',wd);
   const done=new Set((resp||[]).filter(r=>r.checked).map(r=>r.item_id));
   $('checkList').innerHTML=checkItems.map(it=>`
     <div class="chk-row ${done.has(it.id)?'done':''}" id="chk-${it.id}" onclick="toggleCheck(${it.id})">
@@ -929,7 +930,7 @@ async function toggleCheck(id){
   const row=$('chk-'+id);
   const isDone=row.classList.contains('done');
   const{error}=await db.from('checklist_responses').upsert(
-    {item_id:id,promoter_id:profile.id,work_date:todayStr(),checked:!isDone},
+    {item_id:id,promoter_id:profile.id,work_date:session?session.work_date:todayStr(),checked:!isDone},
     {onConflict:'item_id,promoter_id,work_date'});
   if(error)return msg('checkMsg','خطأ — حاول مجدداً','err');
   row.classList.toggle('done');
@@ -1089,10 +1090,12 @@ async function loadStaffCounts(){
 }
 async function loadFillWidget(city){
   const m=curMonth(),elapsed=ksaDayOfMonth();
-  const[{data:pros},{data:atts},{data:sales},{data:tgs}]=await Promise.all([
-    db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).eq('city',city),
-    db.from('attendance').select('promoter_id,work_date,shift,touch_point_id,status').gte('work_date',m+'-01'),
-    db.from('sell_operations').select('promoter_id,customer_type,work_date').gte('work_date',m+'-01'),
+  const{data:pros}=await db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).eq('city',city);
+  const pids=(pros||[]).map(p=>p.id);
+  if(!pids.length){$('fillWidget').innerHTML='<div class="spin">لا مندوبين</div>';return}
+  const[{data:atts},{data:sales},{data:tgs}]=await Promise.all([
+    db.from('attendance').select('promoter_id,work_date,shift,touch_point_id,status').gte('work_date',m+'-01').in('promoter_id',pids),
+    db.from('sell_operations').select('promoter_id,customer_type,work_date').gte('work_date',m+'-01').in('promoter_id',pids),
     db.from('targets').select('touch_point_id,shift,daily_target').eq('month',m)
   ]);
   const tmap={};(tgs||[]).forEach(t=>tmap[t.touch_point_id+'-'+t.shift]=Number(t.daily_target));
@@ -1290,7 +1293,7 @@ async function loadStockView(city,start){
 async function loadCheckView(city){
   const[{data:items},{data:resp}]=await Promise.all([
     db.from('checklist_items').select('id').eq('active',true),
-    db.from('checklist_responses').select('promoter_id,checked,users(full_name)').eq('work_date',todayStr())
+    db.from('checklist_responses').select('promoter_id,checked,users!inner(full_name,city)').eq('work_date',todayStr()).eq('users.city',city)
   ]);
   const total=(items||[]).length;
   const byP={};
@@ -1345,7 +1348,7 @@ async function loadRoutePlan(){
   const dt=$('rpDate').value;
   const[{data:tps},{data:pros},{data:plan}]=await Promise.all([
     db.from('touch_points').select('*').eq('active',true).eq('city',profile.city).order('name'),
-    db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).order('full_name'),
+    db.from('users').select('id,full_name').eq('role','promoter').eq('active',true).eq('city',profile.city).order('full_name'),
     db.from('route_plans').select('*').eq('plan_date',dt)
   ]);
   rpOutlets=tps||[];rpPromoters=pros||[];

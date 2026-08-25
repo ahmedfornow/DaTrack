@@ -11,8 +11,12 @@
  * on instead of a blank screen.
  */
 
-export const ROLES = ['manager', 'supervisor', 'promoter'] as const;
-export type Role = (typeof ROLES)[number];
+import { Role } from '../../domain/values';
+
+export type { Role };
+
+/** @deprecated Use `Role.values` from `domain/values`. Kept for existing imports. */
+export const ROLES = Role.values;
 
 export interface Profile {
   id: string;
@@ -32,9 +36,7 @@ export type ProfileParse =
   | { ok: true; profile: Profile }
   | { ok: false; reason: 'missing' | 'malformed'; detail: string };
 
-function isRole(value: unknown): value is Role {
-  return typeof value === 'string' && (ROLES as readonly string[]).includes(value);
-}
+const isRole = Role.is;
 
 /**
  * Parses a `users` row. `active` defaults to `true` only when the column is

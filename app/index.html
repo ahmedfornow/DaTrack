@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Unlike the legacy app, pinch-zoom is NOT disabled. Locking it out fails
+      WCAG 1.4.4 and the team reads this screen one-handed in bright shop light.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#07090d" />
+    <title>DaTracker | Your Report Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      هذا التطبيق يحتاج جافاسكربت. فعّلها من إعدادات المتصفح ثم حدّث الصفحة.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

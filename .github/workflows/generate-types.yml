@@ -1,0 +1,76 @@
+name: Generate database types
+
+# Types are GENERATED, never hand-written. Running this in CI keeps the token
+# off developer machines entirely, and works around local machines where an
+# application-control policy blocks the CLI binary.
+#
+# Setup, once:
+#   1. Create a personal access token at supabase.com/dashboard/account/tokens
+#   2. Repo Settings -> Secrets and variables -> Actions -> New repository secret
+#      Name: SUPABASE_ACCESS_TOKEN
+#   3. Run this workflow from the Actions tab.
+#
+# It opens a pull request rather than pushing, so a schema change is reviewed
+# before it can break the build.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly drift check — the database is edited from the Supabase dashboard,
+    # so the schema can move without a commit.
+    - cron: '0 5 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Generate types
+        working-directory: app
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN is not set. See the comment at the top of this workflow."
+            exit 1
+          fi
+          mkdir -p src/types
+          npx supabase gen types typescript \
+            --project-id lgewtvrqfofnkrfzqqlz \
+            > src/types/database.ts
+          # A truncated or error-page response must fail loudly, not commit.
+          grep -q 'export type Database' src/types/database.ts
+          wc -l src/types/database.ts
+
+      - name: Typecheck against the new types
+        working-directory: app
+        run: npm run typecheck
+
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/regenerate-database-types
+          title: 'chore: regenerate database types'
+          commit-message: 'chore: regenerate database types from Supabase'
+          body: |
+            Regenerated `app/src/types/database.ts` from project
+            `lgewtvrqfofnkrfzqqlz`.
+
+            A diff here means the database schema moved. Check what changed
+            before merging — every query in `src/data/*` is typed against this.
+          add-paths: app/src/types/database.ts

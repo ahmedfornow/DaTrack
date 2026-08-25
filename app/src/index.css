@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+
+/**
+ * DaTracker design tokens — the single source.
+ *
+ * The identity is unchanged: deep charcoal with a warm gold. What changes is
+ * that it is now systematic. Sizes used to range from 10px to 27px chosen ad
+ * hoc; there are six steps now and nothing else is allowed.
+ */
+@theme {
+  /* --- Surfaces ------------------------------------------------------- */
+  --color-bg: #07090d;
+  --color-surface: #10141b;
+  --color-surface-raised: #161b24;
+  --color-surface-sunken: #0d1219;
+
+  /* --- Brand ---------------------------------------------------------- */
+  --color-gold: #d8bd84;
+  --color-gold-hi: #e8d7ab;
+  --color-gold-lo: #b3915c;
+
+  /* --- Text ----------------------------------------------------------- */
+  --color-ink: #eceae4;
+  --color-muted: #8a93a3;
+  --color-faint: #5c6675;
+
+  /* --- Lines ---------------------------------------------------------- */
+  --color-line: rgb(216 189 132 / 0.16);
+  --color-line-soft: rgb(216 189 132 / 0.08);
+
+  /*
+   * --- Semantic ------------------------------------------------------
+   * Achievement thresholds used everywhere: >=100% achieved, >=70% close,
+   * below that behind. These never overlap with the data palette below.
+   */
+  --color-achieved: #3ddc97;
+  --color-close: #d8bd84;
+  --color-behind: #e5604f;
+  --color-absent: #8a93a3;
+
+  /* --- Type: six steps, no others ------------------------------------ */
+  --text-xs: 0.6875rem; /* 11px — meta, captions */
+  --text-sm: 0.8125rem; /* 13px — secondary */
+  --text-md: 0.9375rem; /* 15px — body, inputs */
+  --text-lg: 1.125rem; /* 18px — headings */
+  --text-xl: 1.4375rem; /* 23px — metrics */
+  --text-2xl: 1.75rem; /* 28px — the one big number */
+
+  --font-sans: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
+
+  /* --- Shape ---------------------------------------------------------- */
+  --radius-card: 1rem;
+  --radius-control: 0.6875rem;
+
+  /* Minimum comfortable touch target — thumb, one-handed, standing up. */
+  --spacing-tap: 3rem; /* 48px */
+}
+
+/**
+ * --- Data palette: the device colours themselves -----------------------
+ *
+ * Charts broken down by device or colour use the actual colour of the thing
+ * sold, so the app's colour language comes from the products rather than a
+ * generic chart-library default. Names match `device_catalog` exactly.
+ *
+ * `static` matters here: Tailwind drops unused theme tokens from the output,
+ * and a chart reads these at runtime via getComputedStyle, where no class name
+ * exists for the build to notice. Without `static` they resolve to "".
+ */
+@theme static {
+  --color-garnet-red: #8c2f39;
+  --color-electric-purple: #6b4c9a;
+  --color-breeze-blue: #7fb2d8;
+  --color-aspen-green: #4a7c59;
+  --color-leaf-green: #7a9a4e;
+  --color-digital-violet: #4b3f72;
+  --color-midnight-black: #23262d;
+  --color-vivid-terracotta: #c2643f;
+}
+
+/**
+ * Metrics must not shift width as they climb — a counter that jitters between
+ * 9 and 10 reads as unstable. Every number in the UI is tabular.
+ */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/**
+ * Generated reports are English and must render left-to-right even though the
+ * surrounding interface is RTL. Without this the content scrambles.
+ */
+@utility report-text {
+  direction: ltr;
+  text-align: left;
+  font-family: var(--font-mono);
+  white-space: pre;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100svh;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, var(--color-surface-sunken) 0%, var(--color-bg) 55%),
+      var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-md);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Visible focus everywhere. The legacy app got this right; keep it. */
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

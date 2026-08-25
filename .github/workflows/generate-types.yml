@@ -1,34 +1,55 @@
 name: Generate database types
 
-# Types are GENERATED, never hand-written. Running this in CI keeps the token
-# off developer machines entirely, and works around local machines where an
-# application-control policy blocks the CLI binary.
+# Types are GENERATED, never hand-written. Running this in CI keeps the access
+# token off developer machines entirely, and works around machines where an
+# application-control policy blocks the Supabase CLI binary.
+#
+# This workflow lives on `main` because `workflow_dispatch` and `schedule` only
+# trigger from the default branch. The project itself lives on the redesign
+# branch until cutover, so the workflow checks out `ref` and opens its pull
+# request against that same branch — `main` is only the launch pad.
 #
 # Setup, once:
 #   1. Create a personal access token at supabase.com/dashboard/account/tokens
 #   2. Repo Settings -> Secrets and variables -> Actions -> New repository secret
 #      Name: SUPABASE_ACCESS_TOKEN
-#   3. Run this workflow from the Actions tab.
-#
-# It opens a pull request rather than pushing, so a schema change is reviewed
-# before it can break the build.
+#   3. Actions tab -> Generate database types -> Run workflow
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch holding app/ — the PR is opened against this branch'
+        required: true
+        default: 'redesign/phase-1'
   schedule:
-    # Weekly drift check — the database is edited from the Supabase dashboard,
-    # so the schema can move without a commit.
+    # Weekly drift check. The database is edited from the Supabase dashboard,
+    # so the schema can move without anyone making a commit.
     - cron: '0 5 * * 1'
 
 permissions:
   contents: write
   pull-requests: write
 
+env:
+  PROJECT_ID: lgewtvrqfofnkrfzqqlz
+  TARGET_REF: ${{ inputs.ref || 'redesign/phase-1' }}
+
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_REF }}
+
+      - name: Confirm the project is on this branch
+        run: |
+          set -euo pipefail
+          if [ ! -f app/package-lock.json ]; then
+            echo "::error::app/ not found on ${TARGET_REF}. Pick a branch that has the project."
+            exit 1
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -51,19 +72,22 @@ jobs:
             exit 1
           fi
           mkdir -p src/types
-          npx supabase gen types typescript \
-            --project-id lgewtvrqfofnkrfzqqlz \
-            > src/types/database.ts
-          # A truncated or error-page response must fail loudly, not commit.
+          npx supabase gen types typescript --project-id "$PROJECT_ID" > src/types/database.ts
+          # An error page or a truncated response must fail loudly, never commit.
           grep -q 'export type Database' src/types/database.ts
-          wc -l src/types/database.ts
+          echo "generated $(wc -l < src/types/database.ts) lines"
 
       - name: Typecheck against the new types
         working-directory: app
         run: npm run typecheck
 
+      - name: Run the test suite against the new types
+        working-directory: app
+        run: npm test
+
       - uses: peter-evans/create-pull-request@v6
         with:
+          base: ${{ env.TARGET_REF }}
           branch: chore/regenerate-database-types
           title: 'chore: regenerate database types'
           commit-message: 'chore: regenerate database types from Supabase'

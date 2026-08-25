@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from '../types/database';
 
 /**
  * The single Supabase client instance.
@@ -21,10 +22,17 @@ if (/service_role|^sbp_|secret/i.test(SUPABASE_PUBLISHABLE_KEY)) {
   );
 }
 
-// TODO(types): once `src/types/database.ts` is generated, this becomes
-// `createClient<Database>(...)` and every query in `src/data/*` is checked at
-// build time. Until then `features/auth/profile.ts` validates at runtime.
-export const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+/**
+ * Typed against the generated schema, so a query that selects a column which
+ * does not exist fails the build instead of returning `undefined` at runtime.
+ *
+ * Note what this does *not* buy us: the database has no Postgres enums, so
+ * `sale_type`, `customer_type`, `shift`, `role` and `status` all arrive as
+ * plain `string`. The compiler cannot tell `'LAS'` from `'las'` or a typo.
+ * Value-level safety for those lives in `src/domain/*` and is checked at the
+ * boundary — see `features/auth/profile.ts` for the pattern.
+ */
+export const db = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

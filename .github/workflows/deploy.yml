@@ -1,0 +1,116 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main, 'redesign/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  verify:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The date logic must be identical no matter where the phone thinks it
+        # is. A developer machine set to KSA time cannot detect a device-local
+        # bug, so the suite runs under a hostile timezone too.
+        timezone: [Asia/Riyadh, America/Los_Angeles]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+        env:
+          TZ: ${{ matrix.timezone }}
+
+  build:
+    name: Build site
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # ---------------------------------------------------------------------
+      # Assemble the published site.
+      #
+      # The legacy app owns "/" and stays live until parity is proven. The
+      # rebuild goes to "/next/". Once GitHub Pages is switched to the Actions
+      # source, THIS ARTIFACT IS THE ENTIRE SITE — if index.html were missing
+      # here, the team's app would disappear. Hence the guard below.
+      # ---------------------------------------------------------------------
+      - name: Assemble site
+        working-directory: .
+        run: |
+          set -euo pipefail
+          mkdir -p site/next
+          cp index.html site/index.html
+          cp -r app/dist/. site/next/
+          # Pages runs Jekyll otherwise, which strips files beginning with "_".
+          touch site/.nojekyll
+
+      - name: Verify the legacy app survived assembly
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test -f site/index.html
+          # Same bytes as the file in the repo, so a build can never alter it.
+          diff -q index.html site/index.html
+          grep -q 'DaTracker' site/index.html
+          test -f site/next/index.html
+          echo "legacy $(wc -c < site/index.html) bytes at /, rebuild at /next/"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to Pages
+    # Only main publishes. Branch pushes build and test but never touch the
+    # live site.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

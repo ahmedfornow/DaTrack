@@ -47,7 +47,9 @@ describe('vocabularies', () => {
     expect(AttendanceStatus.values).toEqual(['work', 'off', 'sick', 'leave', 'absent']);
     expect(PlanStatus.values).toEqual(['off', 'sick', 'annual', 'absent']);
     expect(Role.values).toEqual(['manager', 'supervisor', 'promoter']);
-    expect(StockCategory.values).toEqual(['device', 'terea']);
+    // Matches stock_catalog_category_check, which allows a third value that
+    // SCHEMA.md does not document.
+    expect(StockCategory.values).toEqual(['device', 'terea', 'other']);
     expect(TaskKind.values).toEqual(['daily', 'weekly', 'once']);
   });
 
@@ -393,5 +395,44 @@ describe('text sanitising', () => {
 
   it('builds the synthetic login email', () => {
     expect(loginEmailFor('1699')).toBe('1699@example.com');
+  });
+});
+
+/**
+ * Pins every vocabulary to the CHECK constraint the database actually carries,
+ * verified against pg_constraint on 2026-08-27.
+ *
+ * These are not enums — they are text columns with checks — so the generated
+ * types cannot express them and nothing else will notice if the two drift. A
+ * vocabulary NARROWER than its constraint rejects rows the database happily
+ * stores; WIDER, and it lets a write through that fails at the constraint with
+ * a message no promoter can act on. Both have shipped here before.
+ *
+ * If one of these fails, confirm the live constraint before changing the
+ * expectation — the database is the source of truth, not this file.
+ */
+describe('vocabularies match the live check constraints', () => {
+  it.each([
+    ['users_role_check', Role.values, ['manager', 'supervisor', 'promoter']],
+    ['touch_points_shift_mode_chk', ShiftMode.values, ['day', 'night', 'dual']],
+    ['stock_catalog_category_check', StockCategory.values, ['device', 'terea', 'other']],
+    ['attendance_shift_check', Shift.values, ['day', 'night']],
+    [
+      'attendance_status_check',
+      AttendanceStatus.values,
+      ['work', 'off', 'sick', 'leave', 'absent'],
+    ],
+    ['sell_operations_customer_type_check', CustomerType.values, ['LAS', 'LAU']],
+    ['sell_operations_sale_type_check', SaleType.values, ['SK', 'MGM', 'SK+MGM', 'LD']],
+    ['route_plans_status_chk', PlanStatus.values, ['off', 'sick', 'annual', 'absent']],
+    ['sup_tasks_kind_check', TaskKind.values, ['daily', 'weekly', 'once']],
+  ])('%s', (_constraint, vocabulary, allowed) => {
+    expect([...vocabulary].sort()).toEqual([...allowed].sort());
+  });
+
+  it('device_catalog_device_type_check', () => {
+    expect([...DEVICE_TYPES].sort()).toEqual(
+      ['ILUMA i Prime', 'ILUMA i', 'ILUMA i One'].sort(),
+    );
   });
 });

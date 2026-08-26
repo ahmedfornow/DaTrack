@@ -16,9 +16,10 @@ import type { AttendanceStatus, CustomerType, SaleType, Shift, ShiftMode } from 
 /**
  * Only LAS customers can receive MGM.
  *
- * Enforced here and in the UI. It is *not* currently enforced by the database
- * for certain — `BUSINESS_RULES.md` specifies a check constraint, but the live
- * schema has not been confirmed to carry it, so this is the effective guard.
+ * The database enforces this too — `sell_ops_las_only_mgm` is confirmed present
+ * on `sell_operations`. This guard exists so the UI can block the tap and
+ * explain why, rather than letting a promoter compose an invalid sale and meet
+ * a constraint violation on submit.
  */
 export function isValidSalePair(customerType: CustomerType, saleType: SaleType): boolean {
   if (customerType === 'LAU') {

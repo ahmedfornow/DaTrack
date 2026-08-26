@@ -115,8 +115,15 @@ const ROLE_VALUES = ['manager', 'supervisor', 'promoter'] as const;
 export type Role = (typeof ROLE_VALUES)[number];
 export const Role = vocabulary<Role>('role', ROLE_VALUES);
 
-/** Stock catalog grouping. Drives the headings in the stock message. */
-const STOCK_CATEGORY_VALUES = ['device', 'terea'] as const;
+/**
+ * Stock catalog grouping. Drives the headings in the stock message.
+ *
+ * `other` is accepted because `stock_catalog_category_check` allows it, even
+ * though `SCHEMA.md` documents only two values and nothing uses the third yet.
+ * A parser narrower than its check constraint turns a legitimate row into a
+ * crash on the promoter's stock screen.
+ */
+const STOCK_CATEGORY_VALUES = ['device', 'terea', 'other'] as const;
 export type StockCategory = (typeof STOCK_CATEGORY_VALUES)[number];
 export const StockCategory = vocabulary<StockCategory>('category', STOCK_CATEGORY_VALUES);
 

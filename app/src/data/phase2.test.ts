@@ -8,7 +8,14 @@ import {
   targetKey,
   type Target,
 } from './targets';
-import { groupSales, parseSale, summarize, validateSale, type Sale } from './sales';
+import {
+  groupSales,
+  parseSale,
+  rankCombinations,
+  summarize,
+  validateSale,
+  type Sale,
+} from './sales';
 import { allCombinations } from '../domain/devices';
 import { catalogSummary, diffCatalog } from './devices';
 
@@ -393,5 +400,52 @@ describe('diffCatalog', () => {
 
   it('knows its own size: 3 lines, 17 combinations', () => {
     expect(catalogSummary()).toEqual({ lines: 3, combinations: 17 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shortcut ranking — what makes a sale two taps instead of five
+// ---------------------------------------------------------------------------
+
+describe('rankCombinations', () => {
+  it('orders by frequency', () => {
+    const ranked = rankCombinations([
+      sale({ id: 1, color: 'Garnet Red' }),
+      sale({ id: 2, color: 'Garnet Red' }),
+      sale({ id: 3, color: 'Breeze Blue' }),
+    ]);
+    expect(ranked[0]?.color).toBe('Garnet Red');
+    expect(ranked[0]?.count).toBe(2);
+    expect(ranked[1]?.color).toBe('Breeze Blue');
+  });
+
+  it('treats a different sale or customer type as a different shortcut', () => {
+    const ranked = rankCombinations([
+      sale({ id: 1, saleType: 'SK', customerType: 'LAS' }),
+      sale({ id: 2, saleType: 'MGM', customerType: 'LAS' }),
+      sale({ id: 3, saleType: 'SK', customerType: 'LAU' }),
+    ]);
+    expect(ranked).toHaveLength(3);
+  });
+
+  it('never offers a combination the catalog no longer allows', () => {
+    const ranked = rankCombinations([
+      sale({ id: 1, deviceType: 'ILUMA i One', color: 'Aspen Green' }),
+      sale({ id: 2, deviceType: 'ILUMA i', color: 'Leaf Green' }),
+    ]);
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0]?.deviceType).toBe('ILUMA i');
+  });
+
+  it('respects the limit', () => {
+    const many = allCombinations().map(({ device, color }, i) =>
+      sale({ id: i + 1, deviceType: device, color }),
+    );
+    expect(rankCombinations(many, 4)).toHaveLength(4);
+    expect(rankCombinations(many, 2)).toHaveLength(2);
+  });
+
+  it('returns nothing for a promoter with no history', () => {
+    expect(rankCombinations([])).toEqual([]);
   });
 });

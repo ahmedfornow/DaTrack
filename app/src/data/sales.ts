@@ -188,6 +188,72 @@ export async function listForReport(attendanceId: number): Promise<Result<Sale[]
   return ok((data ?? []).map(parseSale).filter((s): s is Sale => s !== null));
 }
 
+export interface Combination {
+  readonly deviceType: DeviceType;
+  readonly color: DeviceColor;
+  readonly saleType: SaleTypeValue;
+  readonly customerType: CustomerTypeValue;
+  /** How often this promoter has logged it in the window examined. */
+  readonly count: number;
+}
+
+/**
+ * The combinations a promoter logs most often, most frequent first.
+ *
+ * This is what makes a sale two taps instead of five. Rather than walking four
+ * grids every time, the common case becomes one tap on a tile the promoter
+ * recognises. Only combinations still valid in the catalog are offered — a
+ * retired colour must not resurface as a shortcut that fails on submit.
+ */
+export function rankCombinations(
+  sales: readonly Sale[],
+  limit = 4,
+): readonly Combination[] {
+  const counts = new Map<string, Combination>();
+
+  for (const sale of sales) {
+    if (!isValidCombination(sale.deviceType, sale.color)) continue;
+    const key = [sale.deviceType, sale.color, sale.saleType, sale.customerType].join('|');
+    const existing = counts.get(key);
+    if (existing === undefined) {
+      counts.set(key, {
+        deviceType: sale.deviceType as DeviceType,
+        color: sale.color as DeviceColor,
+        saleType: sale.saleType,
+        customerType: sale.customerType,
+        count: 1,
+      });
+    } else {
+      counts.set(key, { ...existing, count: existing.count + 1 });
+    }
+  }
+
+  return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+}
+
+/**
+ * Recent sales for one promoter, used to seed the shortcuts.
+ *
+ * Looks back across days rather than only the current session, so the tiles are
+ * useful on the first sale of a shift instead of appearing only after the
+ * promoter has already done the long version once.
+ */
+export async function listRecentForPromoter(
+  promoterId: string,
+  since: BusinessDate,
+): Promise<Result<Sale[]>> {
+  const { data, error } = await db
+    .from('sell_operations')
+    .select(SALE_COLUMNS)
+    .eq('promoter_id', promoterId)
+    .gte('work_date', since)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) return failFrom(error, { action: 'قراءة المبيعات الأخيرة' });
+  return ok((data ?? []).map(parseSale).filter((s): s is Sale => s !== null));
+}
+
 export interface NewSale {
   /** The session this sale belongs to. Supplies both promoter and work date. */
   readonly attendanceId: number;

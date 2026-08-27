@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LoginScreen } from './features/auth/LoginScreen';
+import { PromoterFlow } from './features/promoter/PromoterFlow';
 import { restoreSession, signOut } from './features/auth/session';
 import type { Profile } from './features/auth/profile';
 import { businessToday } from './lib/businessDay';
@@ -43,6 +44,13 @@ export function App() {
 
   const { profile } = stage;
 
+  if (profile.role === 'promoter') {
+    return (
+      <PromoterFlow profile={profile} onSignedOut={() => setStage({ kind: 'signed-out' })} />
+    );
+  }
+
+  // Supervisor and manager surfaces are Phase 3.
   return (
     <main className="mx-auto w-full max-w-[440px] px-4 py-6">
       <div className="rounded-card border border-line bg-surface p-6">

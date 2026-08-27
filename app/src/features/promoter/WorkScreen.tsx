@@ -9,6 +9,7 @@
 import { SessionRibbon } from './SessionRibbon';
 import { SaleEntry } from './SaleEntry';
 import { SessionList } from './SessionList';
+import { ReportPanel } from './ReportPanel';
 import type { Session } from '../../data/attendance';
 import type { Combination, NewSale, Sale } from '../../data/sales';
 
@@ -18,6 +19,7 @@ export interface WorkScreenProps {
   readonly sales: readonly Sale[];
   readonly shortcuts: readonly Combination[];
   readonly dailyTarget: number | null;
+  readonly gtTarget: number | null;
   readonly isToday: boolean;
   readonly busy: boolean;
   readonly error: string | null;
@@ -26,6 +28,7 @@ export interface WorkScreenProps {
     draft: Omit<NewSale, 'attendanceId' | 'promoterId' | 'workDate'>,
   ) => void;
   readonly onRemoveSale: (saleId: number) => void;
+  readonly onSaveGuidedTrials: (count: number) => void;
   readonly onReturnToToday: () => void;
   readonly onSignOut: () => void;
   readonly onDismissError: () => void;
@@ -37,11 +40,13 @@ export function WorkScreen({
   sales,
   shortcuts,
   dailyTarget,
+  gtTarget,
   isToday,
   busy,
   error,
   onLogSale,
   onRemoveSale,
+  onSaveGuidedTrials,
   onReturnToToday,
   onSignOut,
   onDismissError,
@@ -82,6 +87,20 @@ export function WorkScreen({
       <div className="mt-5">
         <SessionList sales={sales} onRemoveOne={onRemoveSale} busy={busy} />
       </div>
+
+      {session.workingShift !== null && (
+        <div className="mt-5">
+          <ReportPanel
+            outletName={session.outlet?.name ?? ''}
+            workDate={session.workDate}
+            shift={session.workingShift}
+            sales={[...sales].reverse()}
+            target={dailyTarget}
+            gtTarget={gtTarget}
+            onSaveGuidedTrials={onSaveGuidedTrials}
+          />
+        </div>
+      )}
 
       <footer className="mt-8 flex items-center justify-between gap-3 border-t border-line-soft pt-4">
         <p className="truncate text-xs text-faint">{promoterName}</p>

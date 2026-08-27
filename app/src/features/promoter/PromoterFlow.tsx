@@ -46,6 +46,7 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
   const [sales, setSales] = useState<readonly Sale[]>([]);
   const [shortcuts, setShortcuts] = useState<readonly salesData.Combination[]>([]);
   const [dailyTarget, setDailyTarget] = useState<number | null>(null);
+  const [gtTarget, setGtTarget] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -112,7 +113,9 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     if (saleResult.ok) setSales(saleResult.data);
     else setError(saleResult.error.message);
 
-    setDailyTarget(targetResult.ok && targetResult.data !== null ? targetResult.data.dailyTarget : null);
+    const target = targetResult.ok ? targetResult.data : null;
+    setDailyTarget(target?.dailyTarget ?? null);
+    setGtTarget(target?.gtTarget ?? null);
 
     // Seed the shortcuts from recent history so they are useful on the first
     // sale of a shift, not only after the long path has been walked once.
@@ -199,6 +202,13 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     setSales((current) => current.map((s) => (s.id === optimistic.id ? saved : s)));
   };
 
+  const handleSaveGuidedTrials = async (count: number) => {
+    if (phase.kind !== 'working') return;
+    // Persisted when the report is generated, matching the legacy behaviour.
+    const result = await attendance.setGuidedTrials(phase.session.id, count);
+    if (!result.ok) setError(result.error.message);
+  };
+
   const handleRemoveSale = async (saleId: number) => {
     const previous = sales;
     setSales((current) => current.filter((s) => s.id !== saleId));
@@ -265,12 +275,14 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
       sales={sales}
       shortcuts={shortcuts}
       dailyTarget={dailyTarget}
+      gtTarget={gtTarget}
       isToday={isBusinessToday(session.workDate)}
       busy={busy}
       error={error}
       monthLabel={businessMonth()}
       onLogSale={(draft) => void handleLogSale(draft)}
       onRemoveSale={(id) => void handleRemoveSale(id)}
+      onSaveGuidedTrials={(count) => void handleSaveGuidedTrials(count)}
       onReturnToToday={() => {
         setDate(businessToday());
         setPhase({ kind: 'sign-in' });

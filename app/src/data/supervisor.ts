@@ -13,12 +13,36 @@
 
 import { db } from '../lib/supabase';
 import {
+  businessDayOfMonth,
   businessMonth,
+  businessMonthStart,
   businessToday,
+  startOfLastDays,
   type BusinessDate,
   type BusinessMonth,
 } from '../lib/businessDay';
-import { Shift } from '../domain/values';
+import { CustomerType, SaleType, Shift } from '../domain/values';
+import {
+  aggregateCompliance,
+  aggregateSales,
+  type AggregateSale,
+  type ComplianceAttendance,
+  type ComplianceRow,
+  type SalesAggregate,
+} from '../features/supervisor/aggregate';
+import type { PeriodKind } from '../features/reports/periodSummary';
+import type { CsvRow } from '../features/reports/monthCsv';
+
+/** Everything the overview and team panels need for one period. */
+export interface DashboardData {
+  readonly start: BusinessDate;
+  readonly period: PeriodKind;
+  readonly sales: SalesAggregate;
+  readonly compliance: readonly ComplianceRow[];
+  readonly guidedTrials: number;
+  readonly checkIns: number;
+  readonly csvRows: readonly CsvRow[];
+}
 import { deriveStatus, slotKey, type StatusInput, type StatusReport } from '../features/supervisor/status';
 import { failFrom, ok, type Result } from './errors';
 import { parseOutlet, type Outlet } from './outlets';
@@ -189,4 +213,179 @@ export async function loadStatus(
   });
 
   return ok({ status, outlets, date });
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard: period totals and month-to-date compliance
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything the overview and team panels show for a period.
+ *
+ * Scoped by the city's promoter list on both sides. Sales are additionally
+ * inner-joined through attendance to `touch_points` on city, so a sale can only
+ * count if the outlet it happened at belongs to this city.
+ */
+export async function loadDashboard(
+  city: string,
+  period: PeriodKind,
+  now: number = Date.now(),
+): Promise<Result<DashboardData>> {
+  const start = period === 'today'
+    ? businessToday(now)
+    : period === 'week'
+      ? startOfLastDays(7, now)
+      : businessMonthStart(now);
+  const month = businessMonth(now);
+  const monthStart = businessMonthStart(now);
+
+  const teamResult = await listTeam(city);
+  if (!teamResult.ok) return teamResult;
+
+  const promoters = teamResult.data
+    .filter((member) => member.role === 'promoter' && member.active)
+    .map((member) => ({ id: member.id, fullName: member.fullName }));
+  const promoterIds = promoters.map((p) => p.id);
+
+  if (promoterIds.length === 0) {
+    return ok({
+      start,
+      period,
+      sales: aggregateSales([]),
+      compliance: [],
+      guidedTrials: 0,
+      checkIns: 0,
+      csvRows: [],
+    });
+  }
+
+  const [saleResult, attendanceResult, monthAttendanceResult, monthSaleResult, targetResult] =
+    await Promise.all([
+      db
+        .from('sell_operations')
+        .select(
+          'promoter_id, work_date, device_type, color, sale_type, customer_type, created_at, users(full_name), attendance!inner(shift, touch_points!inner(name, city))',
+        )
+        .gte('work_date', start)
+        .eq('attendance.touch_points.city', city)
+        .order('work_date'),
+      db
+        .from('attendance')
+        .select('promoter_id, guided_trials, status, work_date')
+        .gte('work_date', start)
+        .in('promoter_id', promoterIds),
+      db
+        .from('attendance')
+        .select('promoter_id, work_date, touch_point_id, shift, status')
+        .gte('work_date', monthStart)
+        .in('promoter_id', promoterIds),
+      db
+        .from('sell_operations')
+        .select('promoter_id, customer_type, work_date')
+        .gte('work_date', monthStart)
+        .in('promoter_id', promoterIds),
+      db.from('targets').select('touch_point_id, shift, daily_target, month').eq('month', month),
+    ]);
+
+  if (saleResult.error) return failFrom(saleResult.error, { action: 'قراءة المبيعات' });
+  if (attendanceResult.error) {
+    return failFrom(attendanceResult.error, { action: 'قراءة التسجيلات' });
+  }
+
+  const aggregateInput: AggregateSale[] = [];
+  const csvRows: CsvRow[] = [];
+
+  for (const row of saleResult.data ?? []) {
+    const record = row as Row;
+    const saleType = SaleType.tryParse(record['sale_type']);
+    const customerType = CustomerType.tryParse(record['customer_type']);
+    if (saleType === null || customerType === null) continue;
+
+    const user = record['users'] as Row | null;
+    const parent = record['attendance'] as Row | null;
+    const outlet = (parent?.['touch_points'] ?? null) as Row | null;
+
+    const promoterName = typeof user?.['full_name'] === 'string' ? user['full_name'] : '';
+    const outletName = typeof outlet?.['name'] === 'string' ? outlet['name'] : '';
+    const deviceType = String(record['device_type'] ?? '');
+    const color = String(record['color'] ?? '');
+
+    aggregateInput.push({
+      promoterId: String(record['promoter_id'] ?? ''),
+      promoterName,
+      outletName,
+      deviceType,
+      color,
+      saleType,
+      customerType,
+    });
+
+    csvRows.push({
+      workDate: String(record['work_date'] ?? ''),
+      promoterName,
+      outletName,
+      shift: Shift.tryParse(parent?.['shift']) ?? 'day',
+      deviceType,
+      color,
+      saleType,
+      customerType,
+      createdAt: typeof record['created_at'] === 'string' ? record['created_at'] : null,
+    });
+  }
+
+  let guidedTrials = 0;
+  let checkIns = 0;
+  for (const row of attendanceResult.data ?? []) {
+    const record = row as Row;
+    const trials = record['guided_trials'];
+    guidedTrials += typeof trials === 'number' ? trials : 0;
+    checkIns += 1;
+  }
+
+  const dailyTargets = new Map<string, number>();
+  for (const row of targetResult.data ?? []) {
+    const record = row as Row;
+    const outletId = record['touch_point_id'];
+    const shift = Shift.tryParse(record['shift']);
+    if (typeof outletId !== 'number' || shift === null) continue;
+    const target = record['daily_target'];
+    const value = typeof target === 'number' ? target : Number(target);
+    if (Number.isFinite(value)) dailyTargets.set(`${outletId}-${shift}`, value);
+  }
+
+  const monthAttendance: ComplianceAttendance[] = (monthAttendanceResult.data ?? []).map((row) => {
+    const record = row as Row;
+    const outletId = record['touch_point_id'];
+    return {
+      promoterId: String(record['promoter_id'] ?? ''),
+      workDate: String(record['work_date'] ?? ''),
+      touchPointId: typeof outletId === 'number' ? outletId : null,
+      shift: Shift.tryParse(record['shift']),
+      isWork: record['status'] === 'work',
+    };
+  });
+
+  const lasByPromoter = new Map<string, number>();
+  for (const row of monthSaleResult.data ?? []) {
+    const record = row as Row;
+    if (record['customer_type'] !== 'LAS') continue;
+    const id = String(record['promoter_id'] ?? '');
+    lasByPromoter.set(id, (lasByPromoter.get(id) ?? 0) + 1);
+  }
+
+  return ok({
+    start,
+    period,
+    sales: aggregateSales(aggregateInput),
+    compliance: aggregateCompliance({
+      promoters,
+      attendance: monthAttendance,
+      lasByPromoter,
+      dailyTargets,
+      elapsedDays: businessDayOfMonth(now),
+    }),
+    guidedTrials,
+    checkIns,
+    csvRows,
+  });
 }

@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { businessToday, type BusinessDate } from '../../lib/businessDay';
+import { businessToday, businessTomorrow, type BusinessDate } from '../../lib/businessDay';
 import type { Profile } from '../auth/profile';
 import { signOut } from '../auth/session';
 import * as outletsData from '../../data/outlets';
@@ -20,15 +20,20 @@ import * as supervisorData from '../../data/supervisor';
 import { StatusStrip } from './StatusStrip';
 import { Overview } from './Overview';
 import { TeamPanel } from './TeamPanel';
+import { RoutePlanEditor } from './RoutePlanEditor';
+import * as routePlansData from '../../data/routePlans';
+import type { PlanMap } from '../../data/routePlans';
+import type { RouteOutlet } from '../reports/routePlanMessage';
 import type { PeriodKind } from '../reports/periodSummary';
 import type { StatusReport } from './status';
 
-type SupervisorTab = 'status' | 'overview' | 'team';
+type SupervisorTab = 'status' | 'overview' | 'team' | 'plan';
 
 const TABS: { id: SupervisorTab; label: string }[] = [
   { id: 'status', label: 'الوضع' },
   { id: 'overview', label: 'الإجماليات' },
   { id: 'team', label: 'الفريق' },
+  { id: 'plan', label: 'الخطة' },
 ];
 
 export interface SupervisorFlowProps {
@@ -58,6 +63,72 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
   const [period, setPeriod] = useState<PeriodKind>('today');
   const [dashboard, setDashboard] = useState<supervisorData.DashboardData | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+
+  const [planDate, setPlanDate] = useState<BusinessDate>(businessTomorrow());
+  const [picks, setPicks] = useState<PlanMap>(new Map());
+  const [planOutlets, setPlanOutlets] = useState<readonly RouteOutlet[]>([]);
+  const [planPromoters, setPlanPromoters] = useState<readonly { id: string; fullName: string }[]>([]);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // The plan needs its own outlet and promoter lists, and reloads whenever the
+  // date changes — a different day has a different plan.
+  useEffect(() => {
+    if (tab !== 'plan') return;
+    let live = true;
+    void (async () => {
+      const [outletResult, teamResult, planResult] = await Promise.all([
+        outletsData.listActive(city),
+        supervisorData.listTeam(city),
+        routePlansData.loadPlan(planDate),
+      ]);
+      if (!live) return;
+
+      if (outletResult.ok) {
+        setPlanOutlets(
+          outletResult.data.map((outlet) => ({
+            id: outlet.id,
+            name: outlet.name,
+            unicode: outlet.unicode,
+            mapsUrl: outlet.mapsUrl,
+            shiftMode: outlet.shiftMode,
+            isDs: outlet.isDs,
+          })),
+        );
+      }
+      if (teamResult.ok) {
+        setPlanPromoters(
+          teamResult.data
+            .filter((member) => member.role === 'promoter' && member.active)
+            .map((member) => ({ id: member.id, fullName: member.fullName })),
+        );
+      }
+      if (planResult.ok) setPicks(planResult.data);
+      else setError(planResult.error.message);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [tab, city, planDate]);
+
+  const savePlan = async () => {
+    setSaving(true);
+    setPlanNotice(null);
+    const result = await routePlansData.savePlan({
+      date: planDate,
+      createdBy: profile.id,
+      promoterIds: planPromoters.map((p) => p.id),
+      picks,
+      outlets: planOutlets.map((o) => ({ id: o.id, name: o.name })),
+    });
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setError(null);
+    setPlanNotice(`حُفظت خطة ${planDate} (${result.data} تعيين)`);
+  };
 
   // The dashboard is a heavier read than the status strip, so it loads only
   // when a tab that needs it is open.
@@ -213,8 +284,24 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
           />
         ))}
 
+      {tab === 'plan' && (
+        <RoutePlanEditor
+          city={city}
+          date={planDate}
+          onDateChange={setPlanDate}
+          outlets={planOutlets}
+          promoters={planPromoters}
+          picks={picks}
+          onPicksChange={setPicks}
+          busy={saving}
+          notice={planNotice}
+          onSave={() => void savePlan()}
+          readOnly={isManager}
+        />
+      )}
+
       <p className="mt-6 border-t border-line-soft pt-4 text-xs leading-relaxed text-faint">
-        الخطة والإدارة تأتي في التحديث القادم.
+        الأهداف والمواقع والمستخدمون تأتي في التحديث القادم.
       </p>
     </main>
   );

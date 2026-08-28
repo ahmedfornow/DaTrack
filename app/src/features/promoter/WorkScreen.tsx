@@ -113,7 +113,7 @@ export function WorkScreen(props: WorkScreenProps) {
   const active = visible.some((entry) => entry.id === tab) ? tab : 'days';
 
   return (
-    <main className="mx-auto w-full max-w-[440px] px-4 pb-10 pt-3">
+    <main className="mx-auto w-full max-w-app px-4 pb-10 pt-3">
       <SessionRibbon
         outletName={session.outlet?.name ?? 'موقعك'}
         shift={session.workingShift}

@@ -174,7 +174,7 @@ export function RoutePlanEditor({
             type="button"
             onClick={onSave}
             disabled={busy}
-            className="mt-4 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a] disabled:opacity-40"
+            className="mt-4 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold disabled:opacity-40"
           >
             حفظ الخطة
           </button>
@@ -205,7 +205,7 @@ export function RoutePlanEditor({
             <button
               type="button"
               onClick={copy}
-              className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a]"
+              className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold"
             >
               {copied ? 'تم النسخ' : 'نسخ للواتساب'}
             </button>

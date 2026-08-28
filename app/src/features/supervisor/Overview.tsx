@@ -132,7 +132,7 @@ export function Overview({
             <button
               type="button"
               onClick={generate}
-              className="mt-3 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a]"
+              className="mt-3 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold"
             >
               توليد ملخص الفترة
             </button>
@@ -148,7 +148,7 @@ export function Overview({
                 <button
                   type="button"
                   onClick={copy}
-                  className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a]"
+                  className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold"
                 >
                   {copied ? 'تم النسخ' : 'نسخ للواتساب'}
                 </button>

@@ -22,7 +22,24 @@
   /* --- Text ----------------------------------------------------------- */
   --color-ink: #eceae4;
   --color-muted: #8a93a3;
-  --color-faint: #5c6675;
+  /*
+   * Was #5c6675, which measured 2.97:1 on surface-raised — below WCAG AA for
+   * normal text (4.5) and below even the large-text floor (3.0). It is used for
+   * real messages a promoter has to read in bright shop light ("لا مبيعات بعد",
+   * "اختر الجهاز أولاً"), not for decoration, so it has to be legible.
+   *
+   * This value measures 4.69 / 5.01 / 5.41 against surface-raised, surface and
+   * bg. The step down from `muted` is smaller than before; readability wins
+   * over hierarchy when the text is an instruction.
+   */
+  --color-faint: #7c8695;
+
+  /*
+   * Ink on a gold fill. Near-black rather than pure, so the primary button does
+   * not vibrate against the gradient. 10.44:1 on gold, 6.45:1 at the darkest
+   * end of the gradient — comfortably AA across the whole sweep.
+   */
+  --color-on-gold: #12100a;
 
   /* --- Lines ---------------------------------------------------------- */
   --color-line: rgb(216 189 132 / 0.16);
@@ -55,6 +72,13 @@
 
   /* Minimum comfortable touch target — thumb, one-handed, standing up. */
   --spacing-tap: 3rem; /* 48px */
+
+  /*
+   * The app's column width. A phone-first measure that stays readable when the
+   * supervisor opens it on a laptop, rather than stretching a one-handed
+   * interface across a desktop viewport.
+   */
+  --container-app: 27.5rem; /* 440px */
 }
 
 /**

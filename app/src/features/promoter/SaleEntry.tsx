@@ -217,7 +217,7 @@ export function SaleEntry({ shortcuts, busy, onLog }: SaleEntryProps) {
             type="button"
             disabled={!complete || busy}
             onClick={submitCustom}
-            className="min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a] disabled:opacity-40"
+            className="min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold disabled:opacity-40"
           >
             تسجيل البيع
           </button>

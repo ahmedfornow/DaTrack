@@ -77,7 +77,7 @@ export function SignInScreen({
   const shifts = outlet?.shifts ?? [];
 
   return (
-    <main className="mx-auto w-full max-w-[440px] px-4 py-6">
+    <main className="mx-auto w-full max-w-app px-4 py-6">
       <div className="rounded-card border border-line bg-surface p-5">
         <p className="text-sm text-muted">حياك الله</p>
         <p className="mt-0.5 text-lg font-bold text-gold">{promoterName}</p>
@@ -159,7 +159,7 @@ export function SignInScreen({
               shift: working ? shift : null,
             })
           }
-          className="mt-5 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a] disabled:opacity-40"
+          className="mt-5 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold disabled:opacity-40"
         >
           {working ? 'تسجيل الدوام' : `تسجيل ${ATTENDANCE_STATUS_LABEL_WITH_ICON[status]}`}
         </button>

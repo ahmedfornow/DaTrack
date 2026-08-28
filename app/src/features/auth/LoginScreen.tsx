@@ -50,7 +50,7 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
     'focus:border-gold focus:outline-none';
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-[440px] flex-col justify-center px-4 py-6">
+    <main className="mx-auto flex min-h-svh w-full max-w-app flex-col justify-center px-4 py-6">
       <header className="mb-7 text-center">
         <h1 className="text-2xl font-light tracking-wide">
           Da
@@ -110,7 +110,7 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
         <button
           type="submit"
           disabled={busy}
-          className="mt-5 min-h-tap w-full rounded-control bg-gradient-to-bl from-gold-hi via-gold to-gold-lo px-4 text-md font-bold text-[#12100a] shadow-[0_6px_18px_rgba(216,189,132,0.18)] transition-transform active:translate-y-px disabled:cursor-wait disabled:opacity-45"
+          className="mt-5 min-h-tap w-full rounded-control bg-gradient-to-bl from-gold-hi via-gold to-gold-lo px-4 text-md font-bold text-on-gold shadow-[0_6px_18px_rgba(216,189,132,0.18)] transition-transform active:translate-y-px disabled:cursor-wait disabled:opacity-45"
         >
           {busy ? 'جاري الدخول…' : 'دخول'}
         </button>

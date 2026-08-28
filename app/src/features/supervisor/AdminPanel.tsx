@@ -204,7 +204,7 @@ function TargetsSection({
         type="button"
         onClick={save}
         disabled={busy}
-        className="mt-4 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a] disabled:opacity-40"
+        className="mt-4 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold disabled:opacity-40"
       >
         حفظ الأهداف
       </button>
@@ -383,7 +383,7 @@ function UsersSection({
                     onSave(member.id, name, login);
                     setEditing(null);
                   }}
-                  className="mt-3 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo text-sm font-bold text-[#12100a] disabled:opacity-40"
+                  className="mt-3 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo text-sm font-bold text-on-gold disabled:opacity-40"
                 >
                   حفظ
                 </button>
@@ -417,7 +417,7 @@ function UsersSection({
                 window.setTimeout(() => setCopied(false), 2000);
               });
             }}
-            className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-[#12100a]"
+            className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo font-bold text-on-gold"
           >
             {copied ? 'تم النسخ' : 'نسخ'}
           </button>
@@ -566,7 +566,7 @@ function TasksSection({
           onAdd(title, kind, kind === 'weekly' ? weekday : null);
           setTitle('');
         }}
-        className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo text-sm font-bold text-[#12100a] disabled:opacity-40"
+        className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo text-sm font-bold text-on-gold disabled:opacity-40"
       >
         إضافة
       </button>

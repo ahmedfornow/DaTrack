@@ -231,7 +231,7 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
   }, [city, refresh]);
 
   return (
-    <main className="mx-auto w-full max-w-[440px] px-4 pb-10 pt-4">
+    <main className="mx-auto w-full max-w-app px-4 pb-10 pt-4">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs text-muted">

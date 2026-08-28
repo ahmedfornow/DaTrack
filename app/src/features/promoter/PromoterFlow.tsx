@@ -5,12 +5,14 @@
  * registered — the sign-in screen is never shown twice for the same day. That
  * is what makes the two-tap goal reachable: by the time a promoter looks at the
  * screen, they are already logging.
+ *
+ * Per-tab data loads lazily, so opening the app does not wait on the stock
+ * catalog or a month of attendance before the first sale can be logged.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   addDays,
-  businessMonth,
   businessToday,
   isBusinessToday,
   type BusinessDate,
@@ -20,13 +22,15 @@ import type { AttendanceStatus, Shift } from '../../domain/values';
 import type { Profile } from '../auth/profile';
 import { signOut } from '../auth/session';
 import * as attendance from '../../data/attendance';
+import * as checklistData from '../../data/checklist';
 import * as outletsData from '../../data/outlets';
 import * as salesData from '../../data/sales';
+import * as stockData from '../../data/stock';
 import * as targetsData from '../../data/targets';
 import type { Outlet } from '../../data/outlets';
 import type { Sale } from '../../data/sales';
 import { SignInScreen } from './SignInScreen';
-import { WorkScreen } from './WorkScreen';
+import { WorkScreen, type PromoterTab } from './WorkScreen';
 
 export interface PromoterFlowProps {
   readonly profile: Profile;
@@ -40,17 +44,29 @@ type Phase =
 
 export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+  const [tab, setTab] = useState<PromoterTab>('sales');
   const [outlets, setOutlets] = useState<readonly Outlet[]>([]);
   const [date, setDate] = useState<BusinessDate>(businessToday());
   const [daySessions, setDaySessions] = useState<readonly attendance.Session[]>([]);
+  const [monthSessions, setMonthSessions] = useState<readonly attendance.Session[]>([]);
   const [sales, setSales] = useState<readonly Sale[]>([]);
   const [shortcuts, setShortcuts] = useState<readonly salesData.Combination[]>([]);
   const [dailyTarget, setDailyTarget] = useState<number | null>(null);
   const [gtTarget, setGtTarget] = useState<number | null>(null);
+  const [stockCatalog, setStockCatalog] = useState<readonly stockData.StockItem[]>([]);
+  const [savedStock, setSavedStock] = useState<ReadonlyMap<number, number>>(new Map());
+  const [checklistItems, setChecklistItems] = useState<readonly checklistData.ChecklistItem[]>([]);
+  const [checkedItems, setCheckedItems] = useState<ReadonlySet<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // --- initial load: outlets, then today's session if there is one ---------
+  const flash = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(null), 2500);
+  };
+
+  // --- initial load -------------------------------------------------------
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -63,21 +79,22 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
       if (outletResult.ok) setOutlets(outletResult.data);
       else setError(outletResult.error.message);
 
-      if (todayResult.ok && todayResult.data.length > 0) {
-        const working = todayResult.data.find((s) => s.status === 'work');
-        const session = working ?? todayResult.data[0];
-        if (session !== undefined) {
-          setDaySessions(todayResult.data);
-          setPhase(
-            session.status === 'work'
-              ? { kind: 'working', session }
-              : { kind: 'sign-in' },
-          );
-          if (session.status !== 'work') setDaySessions(todayResult.data);
-          return;
+      const rows = todayResult.ok ? todayResult.data : [];
+      setDaySessions(rows);
+      const working = rows.find((s) => s.status === 'work');
+      if (working !== undefined) {
+        setPhase({ kind: 'working', session: working });
+        setTab('sales');
+      } else if (rows.length > 0) {
+        // A leave day: nothing to log, so land on the days list.
+        const first = rows[0];
+        if (first !== undefined) {
+          setPhase({ kind: 'working', session: first });
+          setTab('days');
         }
+      } else {
+        setPhase({ kind: 'sign-in' });
       }
-      setPhase({ kind: 'sign-in' });
     })();
     return () => {
       live = false;
@@ -120,18 +137,71 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     // Seed the shortcuts from recent history so they are useful on the first
     // sale of a shift, not only after the long path has been walked once.
     if (recentResult.ok) {
-      const seeded = salesData.rankCombinations(
-        [...(saleResult.ok ? saleResult.data : []), ...recentResult.data],
-        4,
+      setShortcuts(
+        salesData.rankCombinations(
+          [...(saleResult.ok ? saleResult.data : []), ...recentResult.data],
+          4,
+        ),
       );
-      setShortcuts(seeded);
     }
   }, []);
 
   useEffect(() => {
-    if (phase.kind !== 'working') return;
+    if (phase.kind !== 'working' || phase.session.status !== 'work') return;
     void loadSession(phase.session);
   }, [phase, loadSession]);
+
+  // --- lazy per-tab loads -------------------------------------------------
+  useEffect(() => {
+    if (phase.kind !== 'working' || tab !== 'stock') return;
+    const session = phase.session;
+    let live = true;
+    void (async () => {
+      const [catalogResult, countsResult] = await Promise.all([
+        stockCatalog.length > 0
+          ? Promise.resolve({ ok: true as const, data: [...stockCatalog] })
+          : stockData.listCatalog(),
+        stockData.countsForSession(session.id),
+      ]);
+      if (!live) return;
+      if (catalogResult.ok) setStockCatalog(catalogResult.data);
+      else setError(catalogResult.error.message);
+      if (countsResult.ok) setSavedStock(stockData.indexCounts(countsResult.data));
+    })();
+    return () => {
+      live = false;
+    };
+  }, [phase, tab, stockCatalog]);
+
+  useEffect(() => {
+    if (phase.kind !== 'working' || tab !== 'check') return;
+    const session = phase.session;
+    let live = true;
+    void (async () => {
+      const [itemResult, checkedResult] = await Promise.all([
+        checklistData.listItems(),
+        checklistData.checkedOn(profile.id, session.workDate),
+      ]);
+      if (!live) return;
+      if (itemResult.ok) setChecklistItems(itemResult.data);
+      else setError(itemResult.error.message);
+      if (checkedResult.ok) setCheckedItems(checkedResult.data);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [phase, tab, profile.id]);
+
+  const refreshMonth = useCallback(async () => {
+    const result = await attendance.sessionsThisMonth(profile.id);
+    if (result.ok) setMonthSessions(result.data);
+    else setError(result.error.message);
+  }, [profile.id]);
+
+  useEffect(() => {
+    if (phase.kind !== 'working' || tab !== 'days') return;
+    void refreshMonth();
+  }, [phase.kind, tab, refreshMonth]);
 
   // --- actions ------------------------------------------------------------
 
@@ -155,8 +225,8 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
       setError(result.error.message);
       return;
     }
-    if (result.data.status === 'work') setPhase({ kind: 'working', session: result.data });
-    else setDaySessions([result.data]);
+    setPhase({ kind: 'working', session: result.data });
+    setTab(result.data.status === 'work' ? 'sales' : 'days');
   };
 
   const handleLogSale = async (
@@ -178,8 +248,7 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
       customerType: draft.customerType,
       quantity: 1,
       // Not yet created, so it has no creation time. Inventing one here would
-      // be a device-local timestamp masquerading as a server fact — and the
-      // row's position in the list comes from being prepended, not from this.
+      // be a device-local timestamp masquerading as a server fact.
       createdAt: null,
     };
     setSales((current) => [optimistic, ...current]);
@@ -202,13 +271,6 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     setSales((current) => current.map((s) => (s.id === optimistic.id ? saved : s)));
   };
 
-  const handleSaveGuidedTrials = async (count: number) => {
-    if (phase.kind !== 'working') return;
-    // Persisted when the report is generated, matching the legacy behaviour.
-    const result = await attendance.setGuidedTrials(phase.session.id, count);
-    if (!result.ok) setError(result.error.message);
-  };
-
   const handleRemoveSale = async (saleId: number) => {
     const previous = sales;
     setSales((current) => current.filter((s) => s.id !== saleId));
@@ -216,6 +278,65 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     if (!result.ok) {
       setSales(previous);
       setError(result.error.message);
+    }
+  };
+
+  const handleSaveGuidedTrials = async (count: number) => {
+    if (phase.kind !== 'working') return;
+    const result = await attendance.setGuidedTrials(phase.session.id, count);
+    if (!result.ok) setError(result.error.message);
+  };
+
+  const handleSaveStock = async (
+    entries: readonly { itemId: number; quantity: number }[],
+  ) => {
+    if (phase.kind !== 'working') return;
+    setBusy(true);
+    const result = await stockData.saveCounts(phase.session.id, profile.id, entries);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setSavedStock(new Map(entries.map((entry) => [entry.itemId, entry.quantity])));
+    flash(`تم حفظ ${result.data} صنف`);
+  };
+
+  const handleToggleCheck = async (itemId: number, next: boolean) => {
+    if (phase.kind !== 'working') return;
+    const previous = checkedItems;
+    // Optimistic: a checkbox that waits on the network reads as broken.
+    setCheckedItems((current) => {
+      const updated = new Set(current);
+      if (next) updated.add(itemId);
+      else updated.delete(itemId);
+      return updated;
+    });
+    const result = await checklistData.setChecked(
+      itemId,
+      profile.id,
+      phase.session.workDate,
+      next,
+    );
+    if (!result.ok) {
+      setCheckedItems(previous);
+      setError(result.error.message);
+    }
+  };
+
+  const handleRemoveDay = async (session: attendance.Session) => {
+    setBusy(true);
+    const result = await attendance.removeSession(session.id, profile.id);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    await refreshMonth();
+    // Deleting the day currently being worked leaves nothing to log against.
+    if (phase.kind === 'working' && phase.session.id === session.id) {
+      setPhase({ kind: 'sign-in' });
+      setDate(businessToday());
     }
   };
 
@@ -244,7 +365,7 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
   }
 
   if (phase.kind === 'sign-in') {
-    const workSession = daySessions.find((s) => s.status === 'work');
+    const existing = daySessions[0];
     return (
       <SignInScreen
         promoterName={profile.fullName}
@@ -253,8 +374,11 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
         onDateChange={setDate}
         existingHint={existingHint}
         onOpenExisting={
-          workSession !== undefined
-            ? () => setPhase({ kind: 'working', session: workSession })
+          existing !== undefined
+            ? () => {
+                setPhase({ kind: 'working', session: existing });
+                setTab(existing.status === 'work' ? 'sales' : 'days');
+              }
             : undefined
         }
         plannedNote={null}
@@ -272,17 +396,35 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     <WorkScreen
       promoterName={profile.fullName}
       session={session}
+      tab={tab}
+      onTabChange={setTab}
       sales={sales}
       shortcuts={shortcuts}
       dailyTarget={dailyTarget}
       gtTarget={gtTarget}
       isToday={isBusinessToday(session.workDate)}
+      stockCatalog={stockCatalog}
+      savedStock={savedStock}
+      checklistItems={checklistItems}
+      checkedItems={checkedItems}
+      monthSessions={monthSessions}
       busy={busy}
       error={error}
-      monthLabel={businessMonth()}
+      notice={notice}
       onLogSale={(draft) => void handleLogSale(draft)}
       onRemoveSale={(id) => void handleRemoveSale(id)}
       onSaveGuidedTrials={(count) => void handleSaveGuidedTrials(count)}
+      onSaveStock={(entries) => void handleSaveStock(entries)}
+      onToggleCheck={(itemId, next) => void handleToggleCheck(itemId, next)}
+      onOpenSession={(next) => {
+        setPhase({ kind: 'working', session: next });
+        setTab(next.status === 'work' ? 'sales' : 'days');
+      }}
+      onRegisterDay={(next) => {
+        setDate(next);
+        setPhase({ kind: 'sign-in' });
+      }}
+      onRemoveDay={(next) => void handleRemoveDay(next)}
       onReturnToToday={() => {
         setDate(businessToday());
         setPhase({ kind: 'sign-in' });

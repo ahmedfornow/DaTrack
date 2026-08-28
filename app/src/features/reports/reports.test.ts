@@ -5,6 +5,8 @@ import {
   warningMessage,
 } from './endOfShift';
 import type { Sale } from '../../data/sales';
+import type { StockItem } from '../../data/stock';
+import { buildStockMessage, countedSummary } from './stockCount';
 
 /**
  * These assertions pin the exact bytes the team sends over WhatsApp. The
@@ -225,5 +227,118 @@ describe('pre-send review', () => {
   it('does not divide by a zero target', () => {
     const review = reviewBeforeSending({ ...context, sales: [sale()], target: 0 });
     expect(review.percent).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stock count message — report #2
+// ---------------------------------------------------------------------------
+
+const catalog: StockItem[] = [
+  { id: 1, itemName: 'IQOS ILUMA PRIME i — Garnet Red', category: 'device', sortOrder: 1 },
+  { id: 2, itemName: 'IQOS ILUMA PRIME i — Breeze Blue', category: 'device', sortOrder: 2 },
+  { id: 3, itemName: 'IQOS ILUMA i — Leaf Green', category: 'device', sortOrder: 3 },
+  { id: 4, itemName: 'IQOS ILUMA i ONE — Digital Violet', category: 'device', sortOrder: 4 },
+  { id: 5, itemName: 'TEREA Sienna', category: 'terea', sortOrder: 5 },
+];
+
+describe('stock count message', () => {
+  it('matches the legacy layout, including the uneven separators', () => {
+    const message = buildStockMessage({
+      outletName: 'QAS_Othaim Mall_HYP',
+      workDate: '2026-08-25',
+      catalog,
+      quantities: new Map([[1, 4], [2, 0], [3, 12], [4, 7], [5, 30]]),
+    });
+
+    expect(message).toBe(
+      [
+        'Date: 25/08/2026',
+        'Outlet: QAS_Othaim Mall_HYP',
+        '________',
+        'IQOS ILUMA PRIME i:',
+        'GARNET RED: 4',
+        'BREEZE BLUE: 0',
+        '________',
+        'IQOS ILUMA i:',
+        'LEAF GREEN: 12',
+        '________',
+        'IQOS ILUMA i ONE:',
+        'DIGITAL VIOLET: 7',
+        '_______',
+        'STARTER KITS',
+        '',
+        'SIENNA: 30',
+      ].join('\n'),
+    );
+  });
+
+  it('uses 8 underscores for device groups and 7 for starter kits', () => {
+    const message = buildStockMessage({
+      outletName: 'X',
+      workDate: '2026-08-25',
+      catalog,
+      quantities: new Map(),
+    });
+    const runs = message.split('\n').filter((l) => /^_+$/.test(l)).map((l) => l.length);
+    expect(runs).toEqual([8, 8, 8, 7]);
+  });
+
+  it('distinguishes an uncounted item from one counted zero', () => {
+    // Blank means "not counted"; 0 means "counted, none left". Printing 0 for
+    // both would fabricate a complete stocktake out of a partial one.
+    const message = buildStockMessage({
+      outletName: 'X',
+      workDate: '2026-08-25',
+      catalog,
+      quantities: new Map([[1, 0]]),
+    });
+    expect(message).toContain('GARNET RED: 0');
+    expect(message).toContain('BREEZE BLUE: ');
+    expect(message).not.toContain('BREEZE BLUE: 0');
+  });
+
+  it('keeps ILUMA i separate from ONE and PRIME via the em dash', () => {
+    const message = buildStockMessage({
+      outletName: 'X',
+      workDate: '2026-08-25',
+      catalog,
+      quantities: new Map([[3, 5]]),
+    });
+    const iluma = message.split('IQOS ILUMA i:')[1]?.split('________')[0] ?? '';
+    expect(iluma).toContain('LEAF GREEN');
+    expect(iluma).not.toContain('DIGITAL VIOLET');
+    expect(iluma).not.toContain('GARNET RED');
+  });
+
+  it('sanitises the outlet name so a pasted value cannot break the message', () => {
+    const message = buildStockMessage({
+      outletName: 'QAS_Mall\nSkip to content',
+      workDate: '2026-08-25',
+      catalog: [],
+      quantities: new Map(),
+    });
+    expect(message.split('\n')[1]).toBe('Outlet: QAS_Mall Skip to content');
+  });
+
+  it('carries no Arabic and no emoji', () => {
+    const message = buildStockMessage({
+      outletName: 'QAS_Mall 🏬',
+      workDate: '2026-08-25',
+      catalog,
+      quantities: new Map([[1, 1]]),
+    });
+    expect(message).not.toMatch(/[؀-ۿ]/);
+    expect(message).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('reports counting progress', () => {
+    expect(countedSummary(catalog, new Map([[1, 3], [2, 0]]))).toEqual({
+      counted: 2,
+      total: 5,
+      complete: false,
+    });
+    const all = new Map(catalog.map((i) => [i.id, 1]));
+    expect(countedSummary(catalog, all).complete).toBe(true);
   });
 });

@@ -33,6 +33,11 @@ import {
 import type { PeriodKind } from '../features/reports/periodSummary';
 import type { CsvRow } from '../features/reports/monthCsv';
 
+import { deriveStatus, slotKey, type StatusInput, type StatusReport } from '../features/supervisor/status';
+import { failFrom, invalid, ok, type Result } from './errors';
+import { oneLine } from '../domain/text';
+import { parseOutlet, type Outlet } from './outlets';
+
 /** Everything the overview and team panels need for one period. */
 export interface DashboardData {
   readonly start: BusinessDate;
@@ -43,9 +48,6 @@ export interface DashboardData {
   readonly checkIns: number;
   readonly csvRows: readonly CsvRow[];
 }
-import { deriveStatus, slotKey, type StatusInput, type StatusReport } from '../features/supervisor/status';
-import { failFrom, ok, type Result } from './errors';
-import { parseOutlet, type Outlet } from './outlets';
 
 type Row = Record<string, unknown>;
 
@@ -388,4 +390,86 @@ export async function loadDashboard(
     checkIns,
     csvRows,
   });
+}
+
+// ---------------------------------------------------------------------------
+// User management
+// ---------------------------------------------------------------------------
+
+/**
+ * Renames a person and sets their display login number.
+ *
+ * `login_no` is display only. The real credential is the email in `auth.users`
+ * (`1699@example.com`), which this app cannot change — doing so needs the
+ * service_role key, which must never reach client code. Changing the number
+ * here without changing the email in the Supabase dashboard leaves a roster
+ * that lies, so the UI says so at the point of editing.
+ */
+export async function updateMember(
+  id: string,
+  fullName: string,
+  loginNumber: string,
+): Promise<Result<true>> {
+  const name = oneLine(fullName, 60);
+  if (name === '') return invalid('الاسم مطلوب');
+
+  const login = oneLine(loginNumber, 4).replace(/\D/gu, '');
+
+  const { error } = await db
+    .from('users')
+    .update({ full_name: name, login_no: login === '' ? null : login })
+    .eq('id', id);
+
+  if (error) {
+    return failFrom(error, {
+      action: 'حفظ بيانات المستخدم',
+      overrides: {
+        '42501': 'لا تملك صلاحية تعديل المستخدمين',
+        '23505': 'رقم الدخول مستخدم مسبقاً',
+      },
+    });
+  }
+  return ok(true);
+}
+
+/** Activates or deactivates a person. Deactivation preserves their history. */
+export async function setMemberActive(id: string, active: boolean): Promise<Result<true>> {
+  const { error } = await db.from('users').update({ active }).eq('id', id);
+  if (error) {
+    return failFrom(error, {
+      action: 'تغيير حالة المستخدم',
+      overrides: { '42501': 'لا تملك صلاحية تعديل المستخدمين' },
+    });
+  }
+  return ok(true);
+}
+
+/**
+ * Claims a spare account for a new promoter.
+ *
+ * Creating an auth user needs the service_role key, so the app cannot do it.
+ * The workaround is pre-created inactive placeholder rows that a supervisor
+ * renames and activates. Their password still has to be set from the Supabase
+ * dashboard, which the UI states plainly rather than leaving to be discovered.
+ */
+export async function claimSpare(
+  id: string,
+  fullName: string,
+  city: string,
+): Promise<Result<true>> {
+  const name = oneLine(fullName, 60);
+  if (name === '') return invalid('اكتب اسم المندوب');
+
+  const { error } = await db
+    .from('users')
+    .update({ full_name: name, active: true, city })
+    .eq('id', id);
+
+  if (error) {
+    return failFrom(error, {
+      action: 'تفعيل المندوب',
+      overrides: { '42501': 'لا تملك صلاحية تعديل المستخدمين' },
+    });
+  }
+  return ok(true);
 }

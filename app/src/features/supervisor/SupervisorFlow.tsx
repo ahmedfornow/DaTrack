@@ -24,16 +24,23 @@ import { RoutePlanEditor } from './RoutePlanEditor';
 import * as routePlansData from '../../data/routePlans';
 import type { PlanMap } from '../../data/routePlans';
 import type { RouteOutlet } from '../reports/routePlanMessage';
+import { AdminPanel } from './AdminPanel';
+import * as targetsData from '../../data/targets';
+import * as tasksData from '../../data/tasks';
+import type { Outlet } from '../../data/outlets';
+import type { TeamMember } from '../../data/supervisor';
+import type { SupTask } from '../../data/tasks';
 import type { PeriodKind } from '../reports/periodSummary';
 import type { StatusReport } from './status';
 
-type SupervisorTab = 'status' | 'overview' | 'team' | 'plan';
+type SupervisorTab = 'status' | 'overview' | 'team' | 'plan' | 'admin';
 
 const TABS: { id: SupervisorTab; label: string }[] = [
   { id: 'status', label: 'الوضع' },
   { id: 'overview', label: 'الإجماليات' },
   { id: 'team', label: 'الفريق' },
   { id: 'plan', label: 'الخطة' },
+  { id: 'admin', label: 'إدارة' },
 ];
 
 export interface SupervisorFlowProps {
@@ -110,6 +117,52 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
       live = false;
     };
   }, [tab, city, planDate]);
+
+  const [adminOutlets, setAdminOutlets] = useState<readonly Outlet[]>([]);
+  const [adminTargets, setAdminTargets] = useState<targetsData.TargetTable>(new Map());
+  const [adminTeam, setAdminTeam] = useState<readonly TeamMember[]>([]);
+  const [adminTasks, setAdminTasks] = useState<readonly SupTask[]>([]);
+  const [adminNotice, setAdminNotice] = useState<string | null>(null);
+
+  const loadAdmin = useCallback(async () => {
+    const [outletResult, targetResult, teamResult, taskResult] = await Promise.all([
+      outletsData.listAll(city),
+      targetsData.tableForMonth(),
+      supervisorData.listTeam(city),
+      tasksData.listTasks(profile.id),
+    ]);
+    if (outletResult.ok) setAdminOutlets(outletResult.data);
+    if (targetResult.ok) setAdminTargets(targetResult.data);
+    if (teamResult.ok) setAdminTeam(teamResult.data);
+    if (taskResult.ok) setAdminTasks(taskResult.data);
+    else setError(taskResult.error.message);
+  }, [city, profile.id]);
+
+  useEffect(() => {
+    if (tab !== 'admin') return;
+    void loadAdmin();
+  }, [tab, loadAdmin]);
+
+  const flashAdmin = (message: string) => {
+    setAdminNotice(message);
+    window.setTimeout(() => setAdminNotice(null), 2500);
+  };
+
+  const runAdmin = async (
+    action: () => Promise<{ ok: true; data: unknown } | { ok: false; error: { message: string } }>,
+    success: string,
+  ) => {
+    setSaving(true);
+    const result = await action();
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setError(null);
+    flashAdmin(success);
+    await loadAdmin();
+  };
 
   const savePlan = async () => {
     setSaving(true);
@@ -300,9 +353,58 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
         />
       )}
 
-      <p className="mt-6 border-t border-line-soft pt-4 text-xs leading-relaxed text-faint">
-        الأهداف والمواقع والمستخدمون تأتي في التحديث القادم.
-      </p>
+      {tab === 'admin' &&
+        (isManager ? (
+          <p className="rounded-card border border-line bg-surface px-4 py-6 text-center text-sm text-muted">
+            الإدارة متاحة للمشرف فقط
+          </p>
+        ) : (
+          <AdminPanel
+            city={city}
+            outlets={adminOutlets}
+            targets={adminTargets}
+            team={adminTeam}
+            tasks={adminTasks}
+            busy={saving}
+            notice={adminNotice}
+            onSaveTargets={(entries) =>
+              void runAdmin(() => targetsData.saveTargets(entries), 'حُفظت الأهداف')
+            }
+            onToggleOutlet={(id, active) =>
+              void runAdmin(
+                () => outletsData.setOutletActive(id, active),
+                active ? 'تم تفعيل الموقع' : 'تم إيقاف الموقع',
+              )
+            }
+            onSaveMember={(id, fullName, loginNumber) =>
+              void runAdmin(
+                () => supervisorData.updateMember(id, fullName, loginNumber),
+                'تم الحفظ',
+              )
+            }
+            onToggleMember={(id, active) =>
+              void runAdmin(
+                () => supervisorData.setMemberActive(id, active),
+                active ? 'تم التفعيل' : 'تم الإيقاف',
+              )
+            }
+            onAddTask={(title, kind, weekday) =>
+              void runAdmin(
+                () => tasksData.addTask(profile.id, { title, kind, weekday, dueDate: null }),
+                'تمت الإضافة',
+              )
+            }
+            onToggleTask={(id, done) =>
+              void runAdmin(() => tasksData.setTaskDone(id, profile.id, done), 'تم التحديث')
+            }
+            onRemoveTask={(id) =>
+              void runAdmin(() => tasksData.removeTask(id, profile.id), 'تم الحذف')
+            }
+            onResetTasks={() =>
+              void runAdmin(() => tasksData.resetTasks(profile.id), 'تمت إعادة التعيين')
+            }
+          />
+        ))}
     </main>
   );
 }

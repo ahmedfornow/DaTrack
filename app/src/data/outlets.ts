@@ -16,7 +16,7 @@ import { db } from '../lib/supabase';
 import { firstUrl, oneLine, shortOutletName } from '../domain/text';
 import { shiftsFor } from '../domain/rules';
 import { ShiftMode, type Shift, type ShiftMode as ShiftModeValue } from '../domain/values';
-import { failFrom, ok, type Result } from './errors';
+import { failFrom, invalid, ok, type Result } from './errors';
 
 const OUTLET_COLUMNS =
   'id, name, unicode, maps_url, shift_mode, dual_shift, is_ds, city, active';
@@ -126,4 +126,114 @@ export async function listCities(): Promise<Result<string[]>> {
 /** Index outlets by id, for joining against rows that carry only the id. */
 export function byId(outlets: readonly Outlet[]): ReadonlyMap<number, Outlet> {
   return new Map(outlets.map((outlet) => [outlet.id, outlet]));
+}
+
+// ---------------------------------------------------------------------------
+// Writing
+// ---------------------------------------------------------------------------
+
+export interface OutletDraft {
+  readonly name: string;
+  readonly unicode: string;
+  readonly mapsUrl: string;
+  readonly shiftMode: ShiftModeValue;
+  readonly isDs: boolean;
+}
+
+/**
+ * Sanitises a draft before it can reach the database.
+ *
+ * Returns the cleaned values or a reason. Rejecting prose in the URL field is
+ * the specific guard here: a promoter once pasted a page of copied text into
+ * it, and that text printed inside the team's route message for weeks.
+ */
+export function prepareOutlet(
+  draft: OutletDraft,
+): { ok: true; values: OutletDraft } | { ok: false; reason: string } {
+  const name = oneLine(draft.name, 70);
+  if (name === '') return { ok: false, reason: 'اسم الموقع مطلوب' };
+
+  const rawUrl = String(draft.mapsUrl ?? '').trim();
+  const mapsUrl = firstUrl(rawUrl);
+  if (rawUrl !== '' && mapsUrl === '') {
+    return { ok: false, reason: 'رابط الخريطة غير صالح — يجب أن يبدأ بـ https://' };
+  }
+
+  return {
+    ok: true,
+    values: {
+      name,
+      unicode: oneLine(draft.unicode, 24),
+      mapsUrl,
+      shiftMode: draft.shiftMode,
+      isDs: draft.isDs,
+    },
+  };
+}
+
+/** Creates an outlet in the supervisor's city. */
+export async function createOutlet(draft: OutletDraft, city: string): Promise<Result<Outlet>> {
+  const prepared = prepareOutlet(draft);
+  if (!prepared.ok) return invalid(prepared.reason);
+  const { values } = prepared;
+
+  const { data, error } = await db
+    .from('touch_points')
+    .insert({
+      name: values.name,
+      unicode: values.unicode === '' ? null : values.unicode,
+      maps_url: values.mapsUrl === '' ? null : values.mapsUrl,
+      shift_mode: values.shiftMode,
+      // The legacy boolean is still written by the running app, so it stays in
+      // sync until nothing reads it.
+      dual_shift: values.shiftMode === 'dual',
+      is_ds: values.isDs,
+      city,
+    })
+    .select(OUTLET_COLUMNS)
+    .single();
+
+  if (error) {
+    return failFrom(error, {
+      action: 'إضافة الموقع',
+      overrides: { '23505': 'الاسم مستخدم مسبقاً — أسماء المواقع فريدة' },
+    });
+  }
+
+  const parsed = parseOutlet(data);
+  return parsed === null ? invalid('أُضيف الموقع لكن تعذّرت قراءته — حدّث الصفحة') : ok(parsed);
+}
+
+/** Updates an outlet's details. */
+export async function updateOutlet(id: number, draft: OutletDraft): Promise<Result<true>> {
+  const prepared = prepareOutlet(draft);
+  if (!prepared.ok) return invalid(prepared.reason);
+  const { values } = prepared;
+
+  const { error } = await db
+    .from('touch_points')
+    .update({
+      name: values.name,
+      unicode: values.unicode === '' ? null : values.unicode,
+      maps_url: values.mapsUrl === '' ? null : values.mapsUrl,
+      shift_mode: values.shiftMode,
+      dual_shift: values.shiftMode === 'dual',
+      is_ds: values.isDs,
+    })
+    .eq('id', id);
+
+  if (error) {
+    return failFrom(error, {
+      action: 'تعديل الموقع',
+      overrides: { '23505': 'الاسم مستخدم مسبقاً' },
+    });
+  }
+  return ok(true);
+}
+
+/** Activates or deactivates an outlet. History is preserved either way. */
+export async function setOutletActive(id: number, active: boolean): Promise<Result<true>> {
+  const { error } = await db.from('touch_points').update({ active }).eq('id', id);
+  if (error) return failFrom(error, { action: 'تغيير حالة الموقع' });
+  return ok(true);
 }

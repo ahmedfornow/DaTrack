@@ -29,6 +29,7 @@ import * as stockData from '../../data/stock';
 import * as targetsData from '../../data/targets';
 import type { Outlet } from '../../data/outlets';
 import type { Sale } from '../../data/sales';
+import { isOnline, startReplayLoop, writeQueue } from '../../lib/offline';
 import { SignInScreen } from './SignInScreen';
 import { WorkScreen, type PromoterTab } from './WorkScreen';
 
@@ -60,6 +61,30 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [queued, setQueued] = useState({ pending: 0, failed: 0 });
+  const [online, setOnline] = useState(isOnline());
+
+  const refreshQueueCounts = useCallback(async () => {
+    setQueued(await writeQueue.counts());
+  }, []);
+
+  // Replay on reconnect, and periodically — navigator.onLine reports the
+  // network interface, not whether anything is reachable through it.
+  useEffect(() => {
+    void refreshQueueCounts();
+    const stop = startReplayLoop(() => {
+      void refreshQueueCounts();
+    });
+    const setOn = () => setOnline(true);
+    const setOff = () => setOnline(false);
+    window.addEventListener('online', setOn);
+    window.addEventListener('offline', setOff);
+    return () => {
+      stop();
+      window.removeEventListener('online', setOn);
+      window.removeEventListener('offline', setOff);
+    };
+  }, [refreshQueueCounts]);
 
   const flash = (message: string) => {
     setNotice(message);
@@ -262,6 +287,28 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     });
 
     if (!result.ok) {
+      // A retryable failure means the write never reached the server, so the
+      // sale is queued rather than lost. The optimistic row stays on screen —
+      // removing it would tell the promoter their tap did nothing, and they
+      // would log it again.
+      if (result.error.retryable) {
+        await writeQueue.enqueue({
+          kind: 'sale',
+          attendance: { type: 'server', id: session.id },
+          payload: {
+            promoter_id: profile.id,
+            work_date: session.workDate,
+            device_type: draft.deviceType,
+            color: draft.color,
+            sale_type: draft.saleType,
+            customer_type: draft.customerType,
+            quantity: 1,
+          },
+        });
+        await refreshQueueCounts();
+        return;
+      }
+
       // Reconcile by removing exactly the row we added, not the newest one.
       setSales((current) => current.filter((s) => s.id !== optimistic.id));
       setError(result.error.message);
@@ -411,6 +458,10 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
       busy={busy}
       error={error}
       notice={notice}
+      queuedPending={queued.pending}
+      queuedFailed={queued.failed}
+      online={online}
+      onRetryQueue={() => void writeQueue.replay().then(() => void refreshQueueCounts())}
       onLogSale={(draft) => void handleLogSale(draft)}
       onRemoveSale={(id) => void handleRemoveSale(id)}
       onSaveGuidedTrials={(count) => void handleSaveGuidedTrials(count)}

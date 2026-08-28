@@ -16,6 +16,7 @@ import { ReportPanel } from './ReportPanel';
 import { StockTab } from './StockTab';
 import { ChecklistTab } from './ChecklistTab';
 import { MyDaysTab } from './MyDaysTab';
+import { PendingBadge } from './PendingBadge';
 import type { BusinessDate } from '../../lib/businessDay';
 import type { Session } from '../../data/attendance';
 import type { Combination, NewSale, Sale } from '../../data/sales';
@@ -45,6 +46,10 @@ export interface WorkScreenProps {
   readonly busy: boolean;
   readonly error: string | null;
   readonly notice: string | null;
+  readonly queuedPending: number;
+  readonly queuedFailed: number;
+  readonly online: boolean;
+  readonly onRetryQueue: () => void;
 
   readonly onLogSale: (draft: Omit<NewSale, 'attendanceId' | 'promoterId' | 'workDate'>) => void;
   readonly onRemoveSale: (saleId: number) => void;
@@ -78,6 +83,10 @@ export function WorkScreen(props: WorkScreenProps) {
     busy,
     error,
     notice,
+    queuedPending,
+    queuedFailed,
+    online,
+    onRetryQueue,
     onLogSale,
     onRemoveSale,
     onSaveGuidedTrials,
@@ -141,6 +150,13 @@ export function WorkScreen(props: WorkScreenProps) {
           ))}
         </div>
       )}
+
+      <PendingBadge
+        pending={queuedPending}
+        failed={queuedFailed}
+        online={online}
+        onRetry={onRetryQueue}
+      />
 
       {error !== null && (
         <Banner tone="error" onDismiss={onDismissError}>

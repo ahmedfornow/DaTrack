@@ -10,6 +10,17 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#07090d" />
     <title>DaTracker | Your Report Assistant</title>
+    <!--
+      Relative hrefs, because the app is served from /DaTrack/next/ today and
+      may move to the site root at cutover. An absolute path would break on one
+      of those and the manifest would silently stop applying.
+    -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DaTracker" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

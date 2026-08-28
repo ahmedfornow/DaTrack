@@ -227,6 +227,23 @@ export function ksaCalendarDate(at: Instant): BusinessDate {
   return formatUTC(toMs(at) + KSA_OFFSET_MS);
 }
 
+/**
+ * A full KSA timestamp, `DD/MM/YYYY, HH:mm:ss`.
+ *
+ * Matches what `toLocaleString('en-GB')` produces on a phone already set to
+ * Riyadh time, which is what the CSV export has always shown. The difference is
+ * that this is KSA time by construction rather than by coincidence: the legacy
+ * version renders in whatever timezone the exporting device happens to use, so
+ * the same export from a laptop set to UTC would silently shift every row by
+ * three hours.
+ */
+export function ksaTimestamp(at: Instant): string {
+  const d = new Date(toMs(at) + KSA_OFFSET_MS);
+  const date = `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${pad(d.getUTCFullYear(), 4)}`;
+  const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  return `${date}, ${time}`;
+}
+
 /** `YYYY-MM-DD` rendered as `DD/MM/YYYY` for the generated English reports. */
 export function formatReportDate(date: BusinessDate): string {
   const { year, month, day } = parseBusinessDate(date);

@@ -14,7 +14,7 @@
 import { db } from '../lib/supabase';
 import { businessMonth, type BusinessMonth } from '../lib/businessDay';
 import { Shift, type Shift as ShiftValue } from '../domain/values';
-import { failFrom, ok, type Result } from './errors';
+import { failFrom, invalid, ok, type Result } from './errors';
 
 const TARGET_COLUMNS = 'touch_point_id, shift, month, daily_target, gt_target';
 
@@ -125,4 +125,52 @@ export async function forSession(
 
   if (error) return failFrom(error, { action: 'قراءة هدف اليوم' });
   return ok(data === null ? null : parseTarget(data));
+}
+
+// ---------------------------------------------------------------------------
+// Writing
+// ---------------------------------------------------------------------------
+
+export interface TargetEntry {
+  readonly touchPointId: number;
+  readonly shift: ShiftValue;
+  readonly dailyTarget: number;
+  readonly gtTarget: number;
+}
+
+/**
+ * Saves targets for a month.
+ *
+ * Upserts on the natural key, so re-saving corrects a figure rather than
+ * duplicating it. Only entries with a sales target are written — a blank row
+ * means "not set", which reads as no target rather than as a target of zero.
+ * Those are very different: a zero target makes every achievement infinite.
+ */
+export async function saveTargets(
+  entries: readonly TargetEntry[],
+  month: BusinessMonth = businessMonth(),
+): Promise<Result<number>> {
+  const rows = entries
+    .filter((entry) => Number.isFinite(entry.dailyTarget) && entry.dailyTarget >= 0)
+    .map((entry) => ({
+      touch_point_id: entry.touchPointId,
+      shift: entry.shift,
+      month,
+      daily_target: entry.dailyTarget,
+      gt_target: Number.isFinite(entry.gtTarget) && entry.gtTarget >= 0 ? entry.gtTarget : 0,
+    }));
+
+  if (rows.length === 0) return invalid('أدخل هدفاً واحداً على الأقل');
+
+  const { error } = await db
+    .from('targets')
+    .upsert(rows, { onConflict: 'touch_point_id,shift,month' });
+
+  if (error) {
+    return failFrom(error, {
+      action: 'حفظ الأهداف',
+      overrides: { '23503': 'موقع غير موجود — حدّث الصفحة' },
+    });
+  }
+  return ok(rows.length);
 }

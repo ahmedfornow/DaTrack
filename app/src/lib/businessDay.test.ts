@@ -19,6 +19,7 @@ import {
   isInBusinessMonth,
   ksaCalendarDate,
   ksaClockTime,
+  ksaTimestamp,
   monthStart,
   parseBusinessDate,
   startOfLastDays,
@@ -311,6 +312,28 @@ describe('display clock — real KSA time, never the business clock', () => {
   it('agrees with the business date during the working day', () => {
     const evening = at('2026-08-25T18:45:00Z');
     expect(ksaCalendarDate(evening)).toBe(businessDateAt(evening));
+  });
+});
+
+describe('ksaTimestamp', () => {
+  it('renders KSA date and time regardless of host timezone', () => {
+    expect(ksaTimestamp(at('2026-08-25T18:45:03Z'))).toBe('25/08/2026, 21:45:03');
+  });
+
+  it('rolls the calendar date forward past 21:00 UTC', () => {
+    // 22:30Z is 01:30 the next day in Riyadh. The business date is still the
+    // 24th, but the wall clock shown must be the real one.
+    expect(ksaTimestamp(at('2026-08-24T22:30:00Z'))).toBe('25/08/2026, 01:30:00');
+    expect(businessDateAt(at('2026-08-24T22:30:00Z'))).toBe('2026-08-24');
+  });
+
+  it('pads every component', () => {
+    expect(ksaTimestamp(at('2026-01-05T02:03:04Z'))).toBe('05/01/2026, 05:03:04');
+  });
+
+  it('applies the same offset in winter and summer', () => {
+    expect(ksaTimestamp(at('2026-01-15T12:00:00Z'))).toBe('15/01/2026, 15:00:00');
+    expect(ksaTimestamp(at('2026-07-15T12:00:00Z'))).toBe('15/07/2026, 15:00:00');
   });
 });
 

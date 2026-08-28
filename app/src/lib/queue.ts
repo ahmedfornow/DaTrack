@@ -68,11 +68,23 @@ export interface QueueStore {
   clear(): Promise<void>;
 }
 
-/** What the caller supplies to actually perform a write. */
+/**
+ * What the caller supplies to actually perform a write.
+ *
+ * `opId` is the operation's own id, passed to every attempt at that operation
+ * and never regenerated. The transport sends it with the row so a retry that
+ * follows a lost response collides with the row it already wrote instead of
+ * duplicating it. Passing it here rather than burying it in the payload makes
+ * that structural: no caller can forget to include it.
+ */
 export interface QueueTransport {
   /** Returns the new attendance row's server id. */
-  sendAttendance(payload: Record<string, unknown>): Promise<SendResult<number>>;
-  sendSale(payload: Record<string, unknown>, attendanceId: number): Promise<SendResult<number>>;
+  sendAttendance(payload: Record<string, unknown>, opId: string): Promise<SendResult<number>>;
+  sendSale(
+    payload: Record<string, unknown>,
+    attendanceId: number,
+    opId: string,
+  ): Promise<SendResult<number>>;
 }
 
 /**
@@ -101,16 +113,37 @@ export const MAX_ATTEMPTS = 8;
 let counter = 0;
 
 /**
- * A unique id for an operation.
+ * A unique id for an operation, and now also its idempotency key on the server.
  *
- * `crypto.randomUUID` where available; otherwise a timestamp plus a counter,
- * which is enough because ids only need to be unique within one device's queue.
+ * `crypto.randomUUID` where available. The fallback adds randomness rather than
+ * relying on the timestamp and counter alone: those are unique within one
+ * device's queue, which was enough when the id never left the device, but it is
+ * now written to a uniquely-indexed column that a second device could collide
+ * with. Sixteen random hex characters make that vanishingly unlikely without
+ * needing a UUID implementation.
  */
 export function newOperationId(): string {
-  const globalCrypto = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  const globalCrypto = globalThis.crypto as
+    | { randomUUID?: () => string; getRandomValues?: (array: Uint8Array) => Uint8Array }
+    | undefined;
+
   if (typeof globalCrypto?.randomUUID === 'function') return globalCrypto.randomUUID();
+
   counter += 1;
-  return `op-${Date.now().toString(36)}-${counter.toString(36)}`;
+  return `op-${Date.now().toString(36)}-${counter.toString(36)}-${randomSuffix(globalCrypto)}`;
+}
+
+/** Sixteen hex characters, from the platform's CSPRNG when it has one. */
+function randomSuffix(
+  source: { getRandomValues?: (array: Uint8Array) => Uint8Array } | undefined,
+): string {
+  const bytes = new Uint8Array(8);
+  if (typeof source?.getRandomValues === 'function') {
+    source.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export class WriteQueue {
@@ -122,10 +155,22 @@ export class WriteQueue {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** Adds an operation and returns its local id, for a sale to reference. */
-  async enqueue(body: OperationBody): Promise<string> {
+  /**
+   * Adds an operation and returns its local id, for a sale to reference.
+   *
+   * `id` lets the caller supply an id generated *before* the first attempt.
+   * That matters for the online path: a sale is written directly, and only
+   * queued once that write fails ambiguously. Generating a fresh id at that
+   * point would make the queued retry look like a different sale to the server,
+   * reopening exactly the duplicate window this is here to close. So the caller
+   * mints one id per logical sale and hands it in.
+   *
+   * Re-enqueuing with an id already in the store overwrites that entry rather
+   * than adding a second one, which keeps one logical write to one queue slot.
+   */
+  async enqueue(body: OperationBody, id: string = newOperationId()): Promise<string> {
     const operation: QueuedOperation = {
-      id: newOperationId(),
+      id,
       createdAt: this.now(),
       attempts: 0,
       status: 'pending',
@@ -277,12 +322,12 @@ export class WriteQueue {
     attendanceId: number | 'unresolved' | 'orphaned' | null,
   ): Promise<SendResult<number>> {
     if (operation.body.kind === 'attendance') {
-      return this.transport.sendAttendance(operation.body.payload);
+      return this.transport.sendAttendance(operation.body.payload, operation.id);
     }
     if (typeof attendanceId !== 'number') {
       return { outcome: 'reject', reason: 'مرجع الجلسة غير صالح' };
     }
-    return this.transport.sendSale(operation.body.payload, attendanceId);
+    return this.transport.sendSale(operation.body.payload, attendanceId, operation.id);
   }
 }
 

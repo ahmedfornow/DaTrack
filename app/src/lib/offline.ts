@@ -11,12 +11,19 @@
  *  - A Postgres error code means the server received it, understood it, and
  *    refused. Park it and show the promoter why.
  *
- * The one genuinely ambiguous case is a response lost after the server
- * committed. That would replay as a duplicate sale, and there is no way to tell
- * from the client. Closing it properly needs a client-supplied idempotency key
- * with a unique index — see docs/migrations/. Until then this is at-least-once
- * for that narrow window, which is the right trade against losing sales
- * outright.
+ * The genuinely ambiguous case is a response lost *after* the server committed.
+ * Nothing in the response tells the client that apart from a write that never
+ * arrived, so both classify as retry — and the retry would have written a
+ * second sale.
+ *
+ * That is what `client_op_id` closes. Every attempt at one logical write sends
+ * the same id, uniquely indexed per promoter, so the retry hits 23505 instead
+ * of inserting. A 23505 on replay is therefore not automatically a failure: it
+ * is the question "did my earlier attempt land?", and looking the id up answers
+ * it. Found means the write succeeded and the queue can drop it; genuinely
+ * absent means the conflict came from a different constraint and is real.
+ *
+ * See docs/migrations/001_client_op_id.sql.
  */
 
 import { db } from './supabase';
@@ -27,6 +34,14 @@ import {
   type SendResult,
 } from './queue';
 import { toDataError } from '../data/errors';
+import {
+  findByOpId,
+  idempotencyAvailable,
+  insertIdempotently,
+  promoterIdOf,
+  type IdempotentTable,
+  type OpLookup,
+} from '../data/idempotency';
 
 /** Codes that mean the server refused. Retrying reproduces them. */
 const PERMANENT = new Set([
@@ -50,17 +65,75 @@ function classify(error: unknown, fallback: string): SendResult<never> {
   return { outcome: 'retry', reason: mapped.message !== '' ? mapped.message : fallback };
 }
 
-export const supabaseTransport: QueueTransport = {
-  async sendAttendance(payload) {
-    try {
-      const { data, error } = await db
-        .from('attendance')
-        // The payload was built by data/attendance and is already validated.
-        .insert(payload as never)
-        .select('id')
-        .single();
+/**
+ * Decides what a unique violation on replay actually means.
+ *
+ * Called only after a 23505. If the row carrying this operation id is already
+ * there, the earlier attempt succeeded and its response was simply lost — the
+ * write is done, and the queue should drop it rather than report a failure the
+ * promoter would have to interpret. If it is definitively absent, some other
+ * uniqueness was violated (for attendance, the promoter/date/shift constraint)
+ * and that is a real conflict.
+ *
+ * When the lookup itself cannot complete, nothing has been learned. Guessing
+ * either way is wrong — assume it landed and a sale is lost, assume it did not
+ * and the duplicate gets written anyway — so it stays queued and asks again.
+ */
+async function resolveDuplicate(
+  table: IdempotentTable,
+  payload: Record<string, unknown>,
+  opId: string,
+  error: unknown,
+  fallback: string,
+): Promise<SendResult<number>> {
+  // Without the column there is no id to look up, so a 23505 can only be a real
+  // conflict — and asking would query a column that does not exist.
+  if (!idempotencyAvailable()) return classify(error, fallback);
 
-      if (error) return classify(error, 'تعذّر إرسال التسجيل');
+  const promoterId = promoterIdOf(payload);
+  // No promoter to scope the lookup by means it cannot be asked safely, so the
+  // conflict is reported as it stands rather than guessed at.
+  if (promoterId === null) return classify(error, fallback);
+
+  return interpretDuplicate(await findByOpId(table, promoterId, opId), error, fallback);
+}
+
+/** The decision itself, separated from the I/O so it can be tested directly. */
+export function interpretDuplicate(
+  lookup: OpLookup,
+  error: unknown,
+  fallback: string,
+): SendResult<number> {
+  if (lookup.found === true) return { outcome: 'ok', value: lookup.id };
+  if (lookup.found === 'unknown') {
+    return { outcome: 'retry', reason: 'تعذّر التحقق من الإرسال — سيعاد المحاولة' };
+  }
+  return classify(error, fallback);
+}
+
+/** True for the unique violation that a same-id retry produces. */
+export function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === '23505';
+}
+
+export const supabaseTransport: QueueTransport = {
+  async sendAttendance(payload, opId) {
+    try {
+      const { data, error } = await insertIdempotently(payload, opId, (row) =>
+        db
+          .from('attendance')
+          // The payload was built by data/attendance and is already validated.
+          .insert(row as never)
+          .select('id')
+          .single(),
+      );
+
+      if (error) {
+        return isUniqueViolation(error)
+          ? resolveDuplicate('attendance', payload, opId, error, 'تعذّر إرسال التسجيل')
+          : classify(error, 'تعذّر إرسال التسجيل');
+      }
+
       const id = (data as { id?: unknown } | null)?.id;
       if (typeof id !== 'number') {
         return { outcome: 'reject', reason: 'تعذّرت قراءة رقم الجلسة بعد الإرسال' };
@@ -71,15 +144,20 @@ export const supabaseTransport: QueueTransport = {
     }
   },
 
-  async sendSale(payload, attendanceId) {
+  async sendSale(payload, attendanceId, opId) {
     try {
-      const { data, error } = await db
-        .from('sell_operations')
-        .insert({ ...payload, attendance_id: attendanceId } as never)
-        .select('id')
-        .single();
+      const { data, error } = await insertIdempotently(
+        { ...payload, attendance_id: attendanceId },
+        opId,
+        (row) => db.from('sell_operations').insert(row as never).select('id').single(),
+      );
 
-      if (error) return classify(error, 'تعذّر إرسال البيع');
+      if (error) {
+        return isUniqueViolation(error)
+          ? resolveDuplicate('sell_operations', payload, opId, error, 'تعذّر إرسال البيع')
+          : classify(error, 'تعذّر إرسال البيع');
+      }
+
       const id = (data as { id?: unknown } | null)?.id;
       return { outcome: 'ok', value: typeof id === 'number' ? id : 0 };
     } catch (thrown) {

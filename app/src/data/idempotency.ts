@@ -54,18 +54,19 @@ export function isUnknownColumn(error: unknown): boolean {
   return code === 'PGRST204' || code === '42703';
 }
 
+/** A row that may or may not carry the tag, which is what the column allows. */
+export type Tagged<T> = T & { client_op_id?: string };
+
 /**
  * Attaches the operation id to a row about to be inserted.
  *
- * The cast is deliberate and is the only one. `client_op_id` does not exist in
- * `types/database.ts` until the migration is applied and `npm run gen:types`
- * re-runs, so the compiler cannot see a column that is real in the database.
- * Confining that to one function means removing it later is a one-line change,
- * rather than unpicking a widened type from every insert.
+ * Returns the row untouched when there is no id to attach, or when the server
+ * has already said the column is not there — so the caller never has to ask
+ * which of those applies.
  */
-export function withOpId<T extends object>(row: T, opId: string | undefined): T {
+export function withOpId<T extends object>(row: T, opId: string | undefined): Tagged<T> {
   if (opId === undefined || !columnAvailable) return row;
-  return { ...row, client_op_id: opId } as T;
+  return { ...row, client_op_id: opId };
 }
 
 /** What an insert returns, narrowed to what this file needs to look at. */
@@ -86,7 +87,7 @@ export async function insertIdempotently<T extends object, R>(
   opId: string | undefined,
   // PromiseLike, not Promise: a PostgREST builder is a thenable that only runs
   // when awaited, which is exactly what lets this call it twice.
-  run: (row: T) => PromiseLike<InsertOutcome<R>>,
+  run: (row: Tagged<T>) => PromiseLike<InsertOutcome<R>>,
 ): Promise<InsertOutcome<R>> {
   const first = await run(withOpId(row, opId));
 
@@ -126,8 +127,9 @@ export async function findByOpId(
   opId: string,
 ): Promise<OpLookup> {
   try {
-    // Filtering on a column the generated types cannot see yet — same reason as
-    // the cast in `withOpId`, and it disappears with the same regeneration.
+    // `table` is a union, so the builder is too, and TypeScript will not call a
+    // method across it. The cast is about that union — not about the column,
+    // which the generated types now know.
     const query = db.from(table).select('id') as unknown as FilterableQuery;
 
     const { data, error } = await query

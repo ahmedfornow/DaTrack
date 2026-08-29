@@ -6,6 +6,22 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "app", "run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "app/node_modules/vite/bin/vite.js",
+        "preview",
+        "--outDir",
+        "site",
+        "--base",
+        "/DaTrack/",
+        "--port",
+        "4173"
+      ],
+      "port": 4173,
+      "url": "http://localhost:4173"
     }
   ]
 }

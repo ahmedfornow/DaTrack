@@ -10,7 +10,15 @@
  * both try to own retrying, or a queued sale replays twice.
  */
 
-const VERSION = 'v1';
+/**
+ * Bumped at cutover, when the app moved from /DaTrack/next/ to the site root.
+ *
+ * Caches are keyed per origin, not per scope, so the root worker would inherit
+ * the cache the /next/ worker filled — full of entries for an address that no
+ * longer serves the app. A new name makes `activate` below delete the old one
+ * outright, which is the only thing that clears them.
+ */
+const VERSION = 'v2';
 const SHELL_CACHE = `datracker-shell-${VERSION}`;
 
 /**

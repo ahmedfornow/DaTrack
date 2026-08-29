@@ -1,10 +1,11 @@
 /**
  * Service worker registration.
  *
- * Registered from a relative path so it works whether the app is served from
- * /DaTrack/next/ or, after cutover, the site root. Getting this wrong fails
- * quietly: the app keeps working online and simply never caches anything, which
- * is exactly the failure nobody notices until a dead spot.
+ * Registered from a relative path so the scope follows wherever the build is
+ * deployed. That is what let the app move from /DaTrack/next/ to the site root
+ * without touching this file. Getting it wrong fails quietly: the app keeps
+ * working online and simply never caches anything, which is exactly the failure
+ * nobody notices until a dead spot.
  */
 
 export function registerServiceWorker(): void {

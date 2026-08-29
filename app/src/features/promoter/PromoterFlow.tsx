@@ -30,6 +30,7 @@ import * as targetsData from '../../data/targets';
 import type { Outlet } from '../../data/outlets';
 import type { Sale } from '../../data/sales';
 import { isOnline, startReplayLoop, writeQueue } from '../../lib/offline';
+import { newOperationId } from '../../lib/queue';
 import { SignInScreen } from './SignInScreen';
 import { WorkScreen, type PromoterTab } from './WorkScreen';
 
@@ -279,12 +280,22 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
     setSales((current) => [optimistic, ...current]);
     setError(null);
 
-    const result = await salesData.create({
-      attendanceId: session.id,
-      promoterId: profile.id,
-      workDate: session.workDate,
-      ...draft,
-    });
+    // One id for this sale, minted before the first attempt rather than when it
+    // fails. The failure below is ambiguous by nature — the row may already be
+    // on the server with the response lost — so the queued retry has to carry
+    // the same id as the attempt that may have landed. Generating it at enqueue
+    // time would make the retry a different write and duplicate the sale.
+    const opId = newOperationId();
+
+    const result = await salesData.create(
+      {
+        attendanceId: session.id,
+        promoterId: profile.id,
+        workDate: session.workDate,
+        ...draft,
+      },
+      opId,
+    );
 
     if (!result.ok) {
       // A retryable failure means the write never reached the server, so the
@@ -292,19 +303,22 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
       // removing it would tell the promoter their tap did nothing, and they
       // would log it again.
       if (result.error.retryable) {
-        await writeQueue.enqueue({
-          kind: 'sale',
-          attendance: { type: 'server', id: session.id },
-          payload: {
-            promoter_id: profile.id,
-            work_date: session.workDate,
-            device_type: draft.deviceType,
-            color: draft.color,
-            sale_type: draft.saleType,
-            customer_type: draft.customerType,
-            quantity: 1,
+        await writeQueue.enqueue(
+          {
+            kind: 'sale',
+            attendance: { type: 'server', id: session.id },
+            payload: {
+              promoter_id: profile.id,
+              work_date: session.workDate,
+              device_type: draft.deviceType,
+              color: draft.color,
+              sale_type: draft.saleType,
+              customer_type: draft.customerType,
+              quantity: 1,
+            },
           },
-        });
+          opId,
+        );
         await refreshQueueCounts();
         return;
       }

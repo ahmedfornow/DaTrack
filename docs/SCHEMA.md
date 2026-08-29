@@ -82,8 +82,13 @@ One row per promoter per day per shift. The anchor for sales and stock.
 | `status` | text | `work`, `off`, `sick`, `leave`, `absent` |
 | `guided_trials` | int | Set when the end-of-shift report is generated |
 | `checked_in_at` | timestamptz | |
+| `client_op_id` | text NULL | Idempotency tag — see below. Null for every row predating migration 001 |
 
 **UNIQUE (`promoter_id`, `work_date`, `shift`)** — surfaces as error `23505`.
+
+**UNIQUE (`promoter_id`, `client_op_id`) WHERE `client_op_id` IS NOT NULL** —
+also a `23505`, and the two are told apart by looking the id up, not by parsing
+the constraint name.
 
 ### `sell_operations`
 One row per device sold. Quantity is always 1.
@@ -99,9 +104,28 @@ One row per device sold. Quantity is always 1.
 | `sale_type` | sale_type | |
 | `customer_type` | customer_type | |
 | `created_at` | timestamptz | |
+| `client_op_id` | text NULL | Idempotency tag — see below. Null for every row predating migration 001 |
 
 Composite FK `(device_type, color)` → `device_catalog`. **Casing must match exactly** —
 `ILUMA i Prime`, not `ILUMA i PRIME`.
+
+**UNIQUE (`promoter_id`, `client_op_id`) WHERE `client_op_id` IS NOT NULL.**
+
+### Idempotent writes
+
+`client_op_id` exists so a retried offline write cannot become a second row. The
+client generates one id per logical write — before the first attempt, not when
+it fails — and reuses it for every retry, so an attempt that follows a lost
+response collides with the row it already wrote.
+
+A `23505` on one of these tables is therefore not automatically a failure. The
+client looks the id up: a row carrying it means the earlier attempt committed
+and the write is done; no row means a different constraint was violated and the
+conflict is real. Added by
+[`docs/migrations/001_client_op_id.sql`](migrations/001_client_op_id.sql).
+
+Rows written by the legacy app never carry an id, which is why the index is
+partial and the column stays nullable.
 
 ### `device_catalog`
 17 valid device+colour combinations.

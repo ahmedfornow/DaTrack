@@ -26,6 +26,7 @@ import {
   type SaleType as SaleTypeValue,
 } from '../domain/values';
 import { failFrom, invalid, ok, type Result } from './errors';
+import { insertIdempotently } from './idempotency';
 
 const SALE_COLUMNS =
   'id, attendance_id, promoter_id, work_date, device_type, color, sale_type, customer_type, quantity, created_at';
@@ -284,14 +285,23 @@ export function validateSale(sale: NewSale): string | null {
 /**
  * Records one sale. Quantity is always 1 by design — three devices sold means
  * three rows, which keeps the device and colour breakdowns exact.
+ *
+ * `clientOpId` identifies this logical sale across every attempt at writing it.
+ * It belongs here rather than on {@link NewSale} because it describes the
+ * *write*, not the sale: the same sale retried is one id, and the caller mints
+ * it before this first attempt so that a failure which lands in the offline
+ * queue keeps the same id. Omitting it preserves the previous behaviour
+ * exactly, which is what the supervisor's paths still do.
  */
-export async function create(sale: NewSale): Promise<Result<Sale>> {
+export async function create(
+  sale: NewSale,
+  clientOpId?: string,
+): Promise<Result<Sale>> {
   const problem = validateSale(sale);
   if (problem !== null) return invalid(problem);
 
-  const { data, error } = await db
-    .from('sell_operations')
-    .insert({
+  const { data, error } = await insertIdempotently(
+    {
       attendance_id: sale.attendanceId,
       promoter_id: sale.promoterId,
       work_date: sale.workDate,
@@ -300,9 +310,10 @@ export async function create(sale: NewSale): Promise<Result<Sale>> {
       sale_type: sale.saleType,
       customer_type: sale.customerType,
       quantity: 1,
-    })
-    .select(SALE_COLUMNS)
-    .single();
+    },
+    clientOpId,
+    (row) => db.from('sell_operations').insert(row).select(SALE_COLUMNS).single(),
+  );
 
   if (error) {
     return failFrom(error, {

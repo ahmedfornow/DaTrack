@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
+  newOperationId,
   MAX_ATTEMPTS,
   MemoryQueueStore,
   WriteQueue,
@@ -35,10 +36,15 @@ class FakeTransport implements QueueTransport {
   sendSale(
     payload: Record<string, unknown>,
     attendanceId: number,
+    opId: string,
   ): Promise<SendResult<number>> {
     this.saleCalls.push({ payload, attendanceId });
+    this.saleOpIds.push(opId);
     return Promise.resolve(this.saleResult);
   }
+
+  /** Every operation id the transport was handed, in order, including retries. */
+  saleOpIds: string[] = [];
 }
 
 let store: MemoryQueueStore;
@@ -321,5 +327,124 @@ describe('replay', () => {
 
     const summary = await reopened.replay();
     expect(summary.sent).toBe(1);
+  });
+});
+
+/**
+ * The operation id is also the server-side idempotency key, so it has to stay
+ * fixed for the life of one logical write. Anything that regenerates it turns a
+ * retry into a second sale — see lib/offline.test.ts for the other half.
+ */
+describe('operation identity', () => {
+  it('accepts an id minted before the first attempt', async () => {
+    const id = await queue.enqueue(
+      { kind: 'sale', attendance: { type: 'server', id: 5 }, payload: sale() },
+      'op-supplied-000000000001',
+    );
+
+    expect(id).toBe('op-supplied-000000000001');
+    await queue.replay();
+    expect(transport.saleOpIds).toEqual(['op-supplied-000000000001']);
+  });
+
+  it('re-enqueuing the same id replaces the entry rather than adding one', async () => {
+    const body = { kind: 'sale', attendance: { type: 'server', id: 5 }, payload: sale() } as const;
+    await queue.enqueue(body, 'op-supplied-000000000001');
+    await queue.enqueue(body, 'op-supplied-000000000001');
+
+    expect(await queue.counts()).toEqual({ pending: 1, failed: 0 });
+  });
+
+  it('sends the same id on every attempt', async () => {
+    await queue.enqueue({ kind: 'sale', attendance: { type: 'server', id: 5 }, payload: sale() });
+    transport.saleResult = { outcome: 'retry', reason: 'offline' };
+
+    await queue.replay();
+    await queue.replay();
+    await queue.replay();
+
+    expect(transport.saleOpIds).toHaveLength(3);
+    expect(new Set(transport.saleOpIds).size).toBe(1);
+  });
+
+  it('keeps the id when a parked operation is retried', async () => {
+    const id = await queue.enqueue({
+      kind: 'sale',
+      attendance: { type: 'server', id: 5 },
+      payload: sale(),
+    });
+    transport.saleResult = { outcome: 'reject', reason: 'rejected' };
+    await queue.replay();
+
+    transport.saleResult = { outcome: 'ok', value: 1 };
+    await queue.retry(id);
+    await queue.replay();
+
+    expect(transport.saleOpIds).toEqual([id, id]);
+  });
+
+  it('gives every operation a distinct id', async () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 500; i += 1) ids.add(newOperationId());
+    expect(ids.size).toBe(500);
+  });
+
+  it('produces ids the database column will accept', () => {
+    // `client_op_id` is CHECK (char_length between 8 and 64).
+    const id = newOperationId();
+    expect(id.length).toBeGreaterThanOrEqual(8);
+    expect(id.length).toBeLessThanOrEqual(64);
+  });
+
+  /**
+   * The fallback path, for a browser without `crypto.randomUUID`.
+   *
+   * Its timestamp and counter were always unique within one device's queue,
+   * which was enough while the id never left the device. It now reaches a
+   * unique index, where a second device running the same code could collide —
+   * so the fallback has to carry real entropy. That cross-device property
+   * cannot be observed from inside one process, so what is asserted here is
+   * that the entropy is present and the shape fits the column.
+   */
+  describe('without crypto.randomUUID', () => {
+    const withoutRandomUuid = <T>(run: () => T): T => {
+      const original = globalThis.crypto;
+      Object.defineProperty(globalThis, 'crypto', {
+        value: { getRandomValues: original.getRandomValues.bind(original) },
+        configurable: true,
+      });
+      try {
+        return run();
+      } finally {
+        Object.defineProperty(globalThis, 'crypto', { value: original, configurable: true });
+      }
+    };
+
+    it('actually takes the fallback path', () => {
+      expect(withoutRandomUuid(newOperationId)).toMatch(/^op-/);
+    });
+
+    it('includes 16 hex characters of entropy', () => {
+      expect(withoutRandomUuid(newOperationId)).toMatch(/-[0-9a-f]{16}$/);
+    });
+
+    it('varies that entropy between calls', () => {
+      const suffixes = withoutRandomUuid(() => {
+        const out = new Set<string>();
+        for (let i = 0; i < 200; i += 1) {
+          out.add(newOperationId().split('-').pop() ?? '');
+        }
+        return out;
+      });
+      // The counter alone would make whole ids distinct, so the suffix is
+      // compared on its own — that is the part a second device cannot guess.
+      expect(suffixes.size).toBe(200);
+    });
+
+    it('fits the column even at the extremes', () => {
+      const id = withoutRandomUuid(newOperationId);
+      expect(id.length).toBeGreaterThanOrEqual(8);
+      expect(id.length).toBeLessThanOrEqual(64);
+    });
   });
 });

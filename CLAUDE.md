@@ -3,7 +3,8 @@
 Field sales tracking for an IQOS promoter team in Al-Qassim, Saudi Arabia.
 Replaces WhatsApp-based manual reporting. ~12 promoters, 1 supervisor, 1 read-only manager.
 
-**Live:** https://ahmedfornow.github.io/DaTrack/
+**Live:** https://ahmedfornow.github.io/DaTrack/ — the rebuild
+**Fallback:** https://ahmedfornow.github.io/DaTrack/legacy/ — the previous app, still published
 **Repo:** https://github.com/ahmedfornow/DaTrack
 
 ---
@@ -28,10 +29,24 @@ see "RTL traps" below.
 
 ## Stack
 
-**Current (legacy):** one 1,855-line `index.html` — inline CSS, inline JS, Supabase +
-Chart.js from CDN. No build step. Deployed by pasting into the GitHub web editor.
+**Current:** the rebuild in `app/` — Vite, React, TypeScript, Tailwind, Vitest. Merging
+to `main` builds, tests, and deploys it; there is no manual publish step. See
+`docs/REDESIGN_BRIEF.md` for the design direction.
 
-**Target:** see `docs/REDESIGN_BRIEF.md`.
+**Legacy:** one 1,855-line `index.html` — inline CSS, inline JS, Supabase + Chart.js
+from CDN, no build step. Still published at `/legacy/` as the fallback, and still the
+behavioural reference (`legacy-datracker.html` is the same file with CRLF endings).
+It was deployed by pasting into the GitHub web editor; do not edit it that way now
+without also updating the repo copy, because the build asserts the two are
+byte-identical and will abort the deploy if they drift.
+
+**Deployment layout** — assembled by `.github/workflows/deploy.yml`:
+
+| Path | Serves |
+|---|---|
+| `/` | the rebuild |
+| `/legacy/` | the previous app, byte-identical to the repo's `index.html` |
+| `/next/` | the rebuild's former address — redirects to `/` and unregisters the service worker installed there |
 
 **Backend:** Supabase (Postgres 17, eu-central-1), project ref `lgewtvrqfofnkrfzqqlz`.
 Auth is email+password where the email is synthetic: login number `1699` →

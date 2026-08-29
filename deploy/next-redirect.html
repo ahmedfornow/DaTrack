@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#07090d" />
+    <title>DaTracker</title>
+
+    <!--
+      Published at /DaTrack/next/, the address the rebuild used before it moved
+      to the site root.
+
+      This page exists because of the promoters who installed the app from that
+      address. Their home-screen icon still opens /next/, and their browser
+      still holds a service worker registered at that scope — which serves the
+      old build from cache and would keep doing so indefinitely. Deleting the
+      path instead of replacing it would leave those phones running a frozen
+      copy of the app against the live database, which is worse than a 404
+      because nothing about it looks broken.
+
+      So: unregister that worker, then go to the root. The meta refresh below is
+      the floor — it fires whether or not any of the script runs.
+
+      Cleaning up the stale cache is deliberately NOT done here. Caches are
+      keyed per origin, and this page cannot know which one the current app is
+      using — an earlier version of this file deleted every `datracker-` cache
+      and wiped the shell the root app had just built, costing exactly the
+      offline start this whole feature exists to protect. The service worker's
+      own `activate` drops every cache but its own, which is what the version
+      bump in sw.js is for. One owner for cache lifetime, and it is not here.
+    -->
+    <meta http-equiv="refresh" content="3; url=../" />
+    <link rel="canonical" href="../" />
+
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100svh;
+        display: grid;
+        place-items: center;
+        background: #07090d;
+        color: #eceae4;
+        font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+        text-align: center;
+        padding: 1.5rem;
+      }
+      main { max-width: 22rem; }
+      p { color: #8a93a3; font-size: 0.9375rem; line-height: 1.6; margin: 0 0 1.25rem; }
+      a {
+        display: inline-block;
+        min-height: 3rem;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.6875rem;
+        background: #d8bd84;
+        color: #12100a;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      a:focus-visible { outline: 2px solid #d8bd84; outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p>انتقل التطبيق إلى العنوان الجديد. جارٍ التحويل…</p>
+      <a href="../">افتح التطبيق</a>
+    </main>
+
+    <script>
+      (function () {
+        var done = false;
+
+        function go() {
+          if (done) return;
+          done = true;
+          // replace(), not assign(): leaving this page in history would let the
+          // back button bounce a promoter straight back into the old address.
+          window.location.replace(new URL('../', window.location.href).toString());
+        }
+
+        // Never let cleanup hold the redirect. Whatever has not finished by now
+        // gets another chance on the next visit, and the app matters more.
+        setTimeout(go, 2500);
+
+        function unregister() {
+          if (!('serviceWorker' in navigator)) return Promise.resolve();
+          return navigator.serviceWorker
+            .getRegistrations()
+            .then(function (registrations) {
+              return Promise.all(
+                registrations.map(function (registration) {
+                  // Only the workers scoped to this old path. The root app's
+                  // own worker must survive — unregistering it here would strip
+                  // offline support from the app we are sending them to.
+                  return registration.scope.indexOf('/next/') === -1
+                    ? null
+                    : registration.unregister();
+                }),
+              );
+            })
+            .catch(function () {});
+        }
+
+        unregister().then(go, go);
+      })();
+    </script>
+  </body>
+</html>

@@ -68,31 +68,58 @@ jobs:
       # ---------------------------------------------------------------------
       # Assemble the published site.
       #
-      # The legacy app owns "/" and stays live until parity is proven. The
-      # rebuild goes to "/next/". Once GitHub Pages is switched to the Actions
-      # source, THIS ARTIFACT IS THE ENTIRE SITE — if index.html were missing
-      # here, the team's app would disappear. Hence the guard below.
+      # THIS ARTIFACT IS THE ENTIRE SITE. Pages serves the Actions source, so
+      # anything missing here is missing from the live site — which is why the
+      # guard below runs before publishing rather than after.
+      #
+      #   /         the rebuild — what the team opens
+      #   /legacy/  the previous app, byte-identical to the repo copy, kept as
+      #             the fallback until it is retired
+      #   /next/    the rebuild's former address; redirects to the root and
+      #             unregisters the service worker installed there
       # ---------------------------------------------------------------------
       - name: Assemble site
         working-directory: .
         run: |
           set -euo pipefail
-          mkdir -p site/next
-          cp index.html site/index.html
-          cp -r app/dist/. site/next/
+          mkdir -p site/legacy site/next
+          cp -r app/dist/. site/
+          cp index.html site/legacy/index.html
+          cp deploy/next-redirect.html site/next/index.html
           # Pages runs Jekyll otherwise, which strips files beginning with "_".
           touch site/.nojekyll
 
-      - name: Verify the legacy app survived assembly
+      - name: Verify the assembled site
         working-directory: .
         run: |
           set -euo pipefail
+
+          # --- The rebuild owns the root, and is really the built app --------
           test -f site/index.html
+          test -d site/assets
+          test -f site/manifest.webmanifest
+          test -f site/sw.js
+          # Asserting the exact base catches a wrong VITE_BASE, which would
+          # otherwise deploy a page whose assets all 404.
+          grep -q '/DaTrack/assets/' site/index.html
+
+          # --- The legacy app is intact at its new address -------------------
           # Same bytes as the file in the repo, so a build can never alter it.
-          diff -q index.html site/index.html
-          grep -q 'DaTracker' site/index.html
+          test -f site/legacy/index.html
+          diff -q index.html site/legacy/index.html
+          grep -q 'DaTracker' site/legacy/index.html
+
+          # --- The old address still resolves and sends people forward -------
+          # A bare 404 here would strand every phone that installed the app
+          # from /next/ on a cached build that never updates again.
           test -f site/next/index.html
-          echo "legacy $(wc -c < site/index.html) bytes at /, rebuild at /next/"
+          grep -q 'serviceWorker' site/next/index.html
+          grep -q 'url=../' site/next/index.html
+          # No service worker script at the old scope: a 404 on the update
+          # check is what makes browsers drop the stale registration.
+          test ! -f site/next/sw.js
+
+          echo "rebuild at /, legacy $(wc -c < site/legacy/index.html) bytes at /legacy/, /next/ redirects"
 
       - uses: actions/upload-pages-artifact@v3
         with:

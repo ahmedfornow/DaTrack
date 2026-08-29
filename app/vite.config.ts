@@ -2,9 +2,10 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// The legacy app owns the site root until parity is proven, so the rebuild is
-// published under /next/. Cutover is a one-line change here (or VITE_BASE in CI).
-const base = process.env.VITE_BASE ?? '/DaTrack/next/';
+// The rebuild owns the site root. The legacy app stays published at /legacy/ as
+// a fallback until it is retired, and /next/ — the rebuild's old address —
+// redirects here for anyone who installed the app from it.
+const base = process.env.VITE_BASE ?? '/DaTrack/';
 
 export default defineConfig({
   base,

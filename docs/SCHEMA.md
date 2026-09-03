@@ -78,12 +78,24 @@ One row per promoter per day per shift. The anchor for sales and stock.
 | `promoter_id` | uuid | FK → `users` |
 | `work_date` | date | **Business day** (2am cutoff), not calendar date |
 | `touch_point_id` | bigint NULL | Null for leave days |
-| `shift` | shift NULL | Null for leave days |
+| `shift` | shift **NOT NULL**, default `day` | Carries no meaning on a leave row — see below |
 | `status` | text | `work`, `off`, `sick`, `leave`, `absent` |
+
+> `shift` is not nullable. A leave row silently takes the default `day`, which has two
+> consequences the database will not stop: a promoter marked `off` who signs in for a
+> **day** shift hits `23505` and gets told they are "already registered for the same
+> shift" — describing something that did not happen; and the same promoter *can* sign in
+> for a **night** shift, ending up off and working at once. `findSignInConflict` in
+> `app/src/data/attendance.ts` exists to cover both.
 | `guided_trials` | int | Set when the end-of-shift report is generated |
 | `checked_in_at` | timestamptz | |
+| `client_op_id` | text NULL | Idempotency tag — see below. Null for every row predating migration 001 |
 
 **UNIQUE (`promoter_id`, `work_date`, `shift`)** — surfaces as error `23505`.
+
+**UNIQUE (`promoter_id`, `client_op_id`) WHERE `client_op_id` IS NOT NULL** —
+also a `23505`, and the two are told apart by looking the id up, not by parsing
+the constraint name.
 
 ### `sell_operations`
 One row per device sold. Quantity is always 1.
@@ -99,9 +111,30 @@ One row per device sold. Quantity is always 1.
 | `sale_type` | sale_type | |
 | `customer_type` | customer_type | |
 | `created_at` | timestamptz | |
+| `client_op_id` | text NULL | Idempotency tag — see below. Null for every row predating migration 001 |
 
 Composite FK `(device_type, color)` → `device_catalog`. **Casing must match exactly** —
 `ILUMA i Prime`, not `ILUMA i PRIME`.
+
+**UNIQUE (`promoter_id`, `client_op_id`) WHERE `client_op_id` IS NOT NULL.**
+
+### Idempotent writes
+
+`client_op_id` exists so a retried offline write cannot become a second row. The
+client generates one id per logical write — before the first attempt, not when
+it fails — and reuses it for every retry, so an attempt that follows a lost
+response collides with the row it already wrote.
+
+A `23505` on one of these tables is therefore not automatically a failure. The
+client looks the id up: a row carrying it means the earlier attempt committed
+and the write is done; no row means a different constraint was violated and the
+conflict is real. Added by
+[`docs/migrations/001_client_op_id.sql`](migrations/001_client_op_id.sql), applied
+and verified on 2026-08-29 — columns, length checks, and both partial unique
+indexes.
+
+Rows written by the legacy app never carry an id, which is why the index is
+partial and the column stays nullable.
 
 ### `device_catalog`
 17 valid device+colour combinations.
@@ -149,7 +182,11 @@ check ((touch_point_id is not null and shift is not null and status is null)
 create unique index route_plans_one_per_promoter_day on route_plans (plan_date, promoter_id);
 ```
 
-Two promoters *may* share an outlet+shift — the UI warns but allows it.
+Two promoters **may not** share an outlet+shift — `UNIQUE (plan_date, touch_point_id,
+shift)` rejects the second assignment outright. The UI validates first and names the
+conflict. Leave rows are exempt because they carry NULLs in both columns, and Postgres
+treats NULLs as distinct. See `BUSINESS_RULES.md` for why the "warn but allow" wording
+was wrong.
 
 ### `stock_catalog` / `stock_reports`
 Catalog: `id`, `item_name`, `category` (`device` | `terea`), `sort_order`, `active`.

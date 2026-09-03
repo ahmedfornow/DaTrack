@@ -114,8 +114,21 @@ marked with a leave status — never both, never neither.
 
 Leave statuses: `off`, `sick`, `annual`, `absent`.
 
-Two promoters may share an outlet+shift. Warn, but allow — it happens during training and
-handovers.
+**Two promoters may not share an outlet+shift.** The database enforces this with
+`UNIQUE (plan_date, touch_point_id, shift)`, so a second assignment is rejected outright.
+The UI validates first and names the conflicting outlet and shift, rather than surfacing a
+constraint violation.
+
+> Earlier revisions of this document described the rule as "warn, but allow", on the
+> grounds that training and handovers legitimately put two people on one shift. That has
+> never been true of the running system — the constraint has always blocked it. Allowing it
+> would require dropping the unique index, which is a destructive migration, so the
+> document is corrected to match the database rather than the other way round.
+>
+> Leave rows are exempt in practice: they carry `touch_point_id IS NULL` and
+> `shift IS NULL`, and Postgres treats NULLs as distinct in a unique index. One assignment
+> per promoter per day is enforced separately by the
+> `route_plans_one_per_promoter_day` index.
 
 Saving must **upsert first, then remove** promoters set back to "none". Never delete the
 day's plan before the write succeeds.

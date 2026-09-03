@@ -54,43 +54,66 @@ write application code until I approve the plan.
 
 ## Follow-up prompts
 
-Use these one at a time, after the previous phase is approved and deployed.
+One at a time, after the previous phase is approved.
 
-**Phase 2 — data layer and promoter flow**
+**Phase 2 — offline-first data layer (the core bet)**
 ```
-Phase 1 is approved and deployed. Execute Phase 2 from docs/REDESIGN_BRIEF.md.
+Phase 1 is approved. Execute Phase 2 from docs/REDESIGN_BRIEF.md.
 
-Build the src/data/* modules first, with tests. Every query must be city-scoped and
-business-day correct at this layer — no React component may call Supabase directly.
+This is the phase the whole rebuild is for. Writes are offline-first from the first line —
+no React component may call Supabase directly, and the only way to write is through the
+queue.
 
-Then rebuild the promoter flow to parity with docs/CURRENT_BEHAVIOUR.md: sign-in, sale
-entry, session list, stock, checklist, my-days. Apply the session ribbon from the brief.
+Build in this order:
+1. lib/queue.ts — IndexedDB-backed. Enqueue, attempt immediately, retry with backoff.
+2. Idempotency before anything else. Every queued write carries a client-generated UUID.
+   Run the additive client_id migration from the brief, with the rollback note and
+   verification query, and give them to me before you run it.
+3. src/data/* — one module per table, every query city-scoped and business-day correct.
+4. Last-known-good read cache so the app opens with data on a cold offline start.
+5. A visible pending count in the UI. A queued write is never silent.
 
-Target: logging a sale takes two taps from app open. Show me the tap count for each flow
+Tests I want to see passing before you call this done:
+- Go offline, queue 5 sales, reconnect: exactly 5 rows, zero duplicates.
+- Replay the same queue twice: the count does not change.
+- Queue a sale at 01:30 KSA: it lands on the previous business day.
+
+Duplicated sales are worse than lost ones — they are invisible and they inflate the numbers
+people are judged on. Prove the idempotency works before moving on.
+```
+
+**Phase 3 — promoter flow**
+```
+Execute Phase 3. Rebuild the promoter flow to parity with docs/CURRENT_BEHAVIOUR.md:
+sign-in, sale entry, session list, stock, checklist, my-days. It sits on the offline data
+layer, so it must work with the network off.
+
+Apply the session ribbon from the brief — outlet, shift, business date, LAS against target,
+always visible while logging.
+
+Target: two taps from app open to a logged sale. Show me the tap count for every flow,
 before and after.
 ```
 
-**Phase 3 — supervisor flow**
+**Phase 4 — supervisor flow and reports**
 ```
-Execute Phase 3. Port the six report generators as pure functions with snapshot tests
-first — their output is what the team sends over WhatsApp, so regressions are visible to
-everyone. Match the current output exactly: English body, LTR, no emoji, sanitised fields,
+Execute Phase 4. Port the six report generators as pure functions with snapshot tests
+FIRST — their output is what the team sends over WhatsApp, so regressions are visible to
+everyone. Match current output exactly: English body, LTR, no emoji, sanitised fields,
 totals derived from what actually prints.
 
-Then rebuild the supervisor surface: overview, team accordion, route plan, targets,
-outlets, users, tasks.
+Then the supervisor surface: overview, team accordion, route plan, targets, outlets, users,
+tasks.
 ```
 
-**Phase 5 — offline (the highest-value item)**
+**Phase 5 — PWA and background sync**
 ```
-Execute Phase 5. Priority is the offline write queue: sales and attendance logged without
-a connection must survive, replay when it returns, and show a visible pending count.
-Retail floors have dead spots and lost sales are currently silent failures.
+Execute Phase 5. Manifest, icons, installability, service worker for the app shell, and
+Background Sync so the queue replays even when the app is closed.
 
-Then PWA: manifest, icons, installability, service worker for the app shell.
+Tell me plainly what the offline guarantee is before and after this phase — the owner needs
+to know whether a promoter can close the app on a queued sale.
 ```
-
----
 
 ## Setup before the first prompt
 

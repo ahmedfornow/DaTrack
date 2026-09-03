@@ -11,6 +11,9 @@
 
 import { COLOR_SWATCH, shortNameOf, type DeviceColor } from '../../domain/devices';
 import { shortOutletName } from '../../domain/text';
+import { ksaClockTimeOf } from '../../lib/businessDay';
+import { stockItemLabel } from '../../domain/labels';
+import type { OutletStockReport } from '../../data/stock';
 import type { ComplianceRow, CountedItem, NamedTotals } from './aggregate';
 
 export interface TeamPanelProps {
@@ -20,6 +23,7 @@ export interface TeamPanelProps {
   readonly byDevice: readonly CountedItem[];
   readonly byColor: readonly CountedItem[];
   readonly totalSales: number;
+  readonly stock: readonly OutletStockReport[];
 }
 
 function bandColor(percent: number | null): string {
@@ -43,6 +47,7 @@ export function TeamPanel({
   byDevice,
   byColor,
   totalSales,
+  stock,
 }: TeamPanelProps) {
   return (
     <div className="space-y-2">
@@ -184,6 +189,54 @@ export function TeamPanel({
               })}
             </ul>
           </>
+        )}
+      </Accordion>
+
+      <Accordion title="جرد المواقع" count={stock.length}>
+        {stock.length === 0 ? (
+          <Empty>لا جرد في الفترة</Empty>
+        ) : (
+          <ul className="space-y-2">
+            {stock.map((report) => {
+              const at = ksaClockTimeOf(report.lastReportedAt);
+              return (
+                <li
+                  key={report.outlet}
+                  className="overflow-hidden rounded-control border border-line-soft bg-surface-raised"
+                >
+                  <details>
+                    <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold text-ink">
+                          {shortOutletName(report.outlet)}
+                        </span>
+                        <span className="tabular block text-xs text-muted" dir="ltr">
+                          {report.itemCount} صنف · {report.totalUnits} قطعة
+                          {at !== null ? ` · ${at}` : ''}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-xs text-faint">عرض</span>
+                    </summary>
+                    <ul className="border-t border-line-soft px-3 py-1">
+                      {report.lines.map((line) => (
+                        <li
+                          key={line.itemId}
+                          className="flex items-center justify-between gap-3 border-b border-line-soft py-1.5 last:border-b-0"
+                        >
+                          <span className="truncate text-xs text-muted" dir="ltr">
+                            {stockItemLabel(line.itemName)}
+                          </span>
+                          <span className="tabular shrink-0 text-xs font-bold text-ink" dir="ltr">
+                            {line.quantity}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </Accordion>
     </div>

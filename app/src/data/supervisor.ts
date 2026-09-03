@@ -37,6 +37,7 @@ import { deriveStatus, slotKey, type StatusInput, type StatusReport } from '../f
 import { failFrom, invalid, ok, type Result } from './errors';
 import { oneLine } from '../domain/text';
 import { parseOutlet, type Outlet } from './outlets';
+import { loadOutletCounts, type OutletStockReport } from './stock';
 
 /** Everything the overview and team panels need for one period. */
 export interface DashboardData {
@@ -47,6 +48,12 @@ export interface DashboardData {
   readonly guidedTrials: number;
   readonly checkIns: number;
   readonly csvRows: readonly CsvRow[];
+  /**
+   * Stock counted in the period, by outlet. Empty rather than absent when the
+   * read fails — a stocktake nobody can see is a gap in a reference panel, not
+   * a reason to fail the whole dashboard the supervisor opened it for.
+   */
+  readonly stock: readonly OutletStockReport[];
 }
 
 type Row = Record<string, unknown>;
@@ -258,11 +265,18 @@ export async function loadDashboard(
       guidedTrials: 0,
       checkIns: 0,
       csvRows: [],
+      stock: [],
     });
   }
 
-  const [saleResult, attendanceResult, monthAttendanceResult, monthSaleResult, targetResult] =
-    await Promise.all([
+  const [
+    saleResult,
+    attendanceResult,
+    monthAttendanceResult,
+    monthSaleResult,
+    targetResult,
+    stockResult,
+  ] = await Promise.all([
       db
         .from('sell_operations')
         .select(
@@ -287,6 +301,7 @@ export async function loadDashboard(
         .gte('work_date', monthStart)
         .in('promoter_id', promoterIds),
       db.from('targets').select('touch_point_id, shift, daily_target, month').eq('month', month),
+      loadOutletCounts(city, start),
     ]);
 
   if (saleResult.error) return failFrom(saleResult.error, { action: 'قراءة المبيعات' });
@@ -389,6 +404,7 @@ export async function loadDashboard(
     guidedTrials,
     checkIns,
     csvRows,
+    stock: stockResult.ok ? stockResult.data : [],
   });
 }
 

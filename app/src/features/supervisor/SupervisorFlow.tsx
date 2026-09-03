@@ -334,6 +334,7 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
             byDevice={dashboard.sales.byDevice}
             byColor={dashboard.sales.byColor}
             totalSales={dashboard.sales.total}
+            stock={dashboard.stock}
           />
         ))}
 

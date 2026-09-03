@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { stockItemLabel } from './labels';
 import {
   AttendanceStatus,
   CustomerType,
@@ -434,5 +435,37 @@ describe('vocabularies match the live check constraints', () => {
     expect([...DEVICE_TYPES].sort()).toEqual(
       ['ILUMA i Prime', 'ILUMA i', 'ILUMA i One'].sort(),
     );
+  });
+});
+
+describe('stockItemLabel', () => {
+  it('drops the shared prefix from a sub-line item', () => {
+    expect(stockItemLabel('IQOS ILUMA i ONE — Leaf Green')).toBe('ONE — Leaf Green');
+    expect(stockItemLabel('IQOS ILUMA i PRIME — Garnet Red')).toBe('PRIME — Garnet Red');
+  });
+
+  it('keeps the device on the base ILUMA i, which has no sub-line', () => {
+    // Stripping here would leave "— Breeze Blue" — a colour with nothing to
+    // attach it to, and in a flat list no heading to recover it from.
+    expect(stockItemLabel('IQOS ILUMA i — Breeze Blue')).toBe('ILUMA i — Breeze Blue');
+  });
+
+  it('drops the brand from a TEREA item', () => {
+    expect(stockItemLabel('IQOS TEREA Sienna')).toBe('TEREA Sienna');
+  });
+
+  it('never returns a label that starts with the separator', () => {
+    for (const name of [
+      'IQOS ILUMA i — Breeze Blue',
+      'IQOS ILUMA i ONE — Leaf Green',
+      'IQOS ILUMA i PRIME — Garnet Red',
+      'IQOS TEREA Sienna',
+    ]) {
+      expect(stockItemLabel(name).startsWith('—')).toBe(false);
+    }
+  });
+
+  it('leaves an unrecognised name alone', () => {
+    expect(stockItemLabel('Accessory Pouch')).toBe('Accessory Pouch');
   });
 });

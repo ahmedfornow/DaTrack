@@ -117,3 +117,26 @@ export const MONTH_LABEL: readonly string[] = [
   'نوفمبر',
   'ديسمبر',
 ];
+
+/**
+ * A stock item's display name, with the catalog's redundant prefixes removed.
+ *
+ * `stock_catalog.item_name` is fully qualified — "IQOS ILUMA i ONE — Leaf
+ * Green" — which is right for the generated report, where the message stands
+ * alone in WhatsApp, and wrong in a list where every row starts the same way
+ * and the only part that differs is pushed off the end of a narrow screen.
+ *
+ * The base ILUMA i is the case worth knowing about. Its items are named
+ * "IQOS ILUMA i — Breeze Blue", so stripping the shared prefix the way the
+ * legacy screen does leaves "— Breeze Blue": a colour with no device attached.
+ * That reads as a rendering fault, and in a flat list there is no group heading
+ * to recover the device from, so the line name stays.
+ *
+ * The generated stock message does NOT use this — it matches on the full name
+ * and prints its own qualified headings. Display only.
+ */
+export function stockItemLabel(itemName: string): string {
+  const withoutBrand = itemName.replace(/^IQOS\s+/, '');
+  if (withoutBrand.startsWith('ILUMA i —')) return withoutBrand;
+  return withoutBrand.replace(/^ILUMA i\s+/, '');
+}

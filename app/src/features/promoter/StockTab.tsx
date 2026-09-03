@@ -14,6 +14,7 @@ import { useState } from 'react';
 import type { BusinessDate } from '../../lib/businessDay';
 import type { StockItem } from '../../data/stock';
 import { buildStockMessage, countedSummary } from '../reports/stockCount';
+import { stockItemLabel } from '../../domain/labels';
 
 export interface StockTabProps {
   readonly catalog: readonly StockItem[];
@@ -100,7 +101,7 @@ export function StockTab({
           {catalog.map((item) => {
             const heading = item.category !== lastCategory ? item.category : null;
             lastCategory = item.category;
-            const label = item.itemName.replace('IQOS ILUMA i ', '').replace('IQOS ', '');
+            const label = stockItemLabel(item.itemName);
             return (
               <div key={item.id}>
                 {heading !== null && (

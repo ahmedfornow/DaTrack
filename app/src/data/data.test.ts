@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toDataError, fail, ok, invalid, type Result } from './errors';
+import * as stock from './stock';
 import {
   conflictMessage,
   findSignInConflict,
@@ -284,5 +285,115 @@ describe('sign-in conflicts', () => {
       expect(message.length).toBeGreaterThan(10);
       expect(message).toMatch(/[؀-ۿ]/); // contains Arabic
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Supervisor stock read-back
+// ---------------------------------------------------------------------------
+
+describe('groupStockByOutlet', () => {
+  const row = (
+    outlet: string,
+    itemId: number,
+    quantity: number,
+    reportedAt: string | null,
+    itemName = `item-${itemId}`,
+  ): stock.StockReportRow => ({ outlet, itemId, itemName, quantity, reportedAt });
+
+  it('groups rows under their outlet', () => {
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Alpha_A_MN_BR', 1, 4, '2026-08-29T10:00:00Z'),
+      row('QAS_Beta_A_MN_BR', 2, 7, '2026-08-29T09:00:00Z'),
+    ]);
+
+    expect(grouped.map((g) => g.outlet)).toEqual(['QAS_Alpha_A_MN_BR', 'QAS_Beta_A_MN_BR']);
+  });
+
+  it('keeps only the newest count for an item', () => {
+    // Input arrives newest-first, so the stale figure must lose. A month of
+    // daily counts would otherwise print the same item twenty times and give
+    // the supervisor no way to tell which number is current.
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Alpha_A_MN_BR', 1, 3, '2026-08-29T10:00:00Z'),
+      row('QAS_Alpha_A_MN_BR', 1, 99, '2026-08-28T10:00:00Z'),
+      row('QAS_Alpha_A_MN_BR', 1, 50, '2026-08-27T10:00:00Z'),
+    ]);
+
+    expect(grouped[0]?.lines).toHaveLength(1);
+    expect(grouped[0]?.lines[0]?.quantity).toBe(3);
+  });
+
+  it('counts distinct items, not rows', () => {
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Alpha_A_MN_BR', 1, 3, '2026-08-29T10:00:00Z'),
+      row('QAS_Alpha_A_MN_BR', 1, 9, '2026-08-28T10:00:00Z'),
+      row('QAS_Alpha_A_MN_BR', 2, 5, '2026-08-28T10:00:00Z'),
+    ]);
+
+    expect(grouped[0]?.itemCount).toBe(2);
+  });
+
+  it('totals only the quantities that print', () => {
+    // The superseded 99 must not reach the total, or the header contradicts
+    // the list directly under it.
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Alpha_A_MN_BR', 1, 3, '2026-08-29T10:00:00Z'),
+      row('QAS_Alpha_A_MN_BR', 1, 99, '2026-08-28T10:00:00Z'),
+      row('QAS_Alpha_A_MN_BR', 2, 5, '2026-08-29T10:00:00Z'),
+    ]);
+
+    expect(grouped[0]?.totalUnits).toBe(8);
+    const printed = grouped[0]?.lines.reduce((sum, line) => sum + line.quantity, 0);
+    expect(printed).toBe(grouped[0]?.totalUnits);
+  });
+
+  it('reports the most recent count as the outlet timestamp', () => {
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Alpha_A_MN_BR', 1, 3, '2026-08-29T18:30:00Z'),
+      row('QAS_Alpha_A_MN_BR', 2, 5, '2026-08-29T08:00:00Z'),
+    ]);
+
+    expect(grouped[0]?.lastReportedAt).toBe('2026-08-29T18:30:00Z');
+  });
+
+  it('puts the most recently counted outlet first', () => {
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Stale_A_MN_BR', 1, 1, '2026-08-20T10:00:00Z'),
+      row('QAS_Fresh_A_MN_BR', 2, 1, '2026-08-29T10:00:00Z'),
+    ]);
+
+    expect(grouped.map((g) => g.outlet)).toEqual(['QAS_Fresh_A_MN_BR', 'QAS_Stale_A_MN_BR']);
+  });
+
+  it('sinks an outlet whose counts carry no timestamp', () => {
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Undated_A_MN_BR', 1, 1, null),
+      row('QAS_Dated_A_MN_BR', 2, 1, '2026-08-20T10:00:00Z'),
+    ]);
+
+    expect(grouped.map((g) => g.outlet)).toEqual(['QAS_Dated_A_MN_BR', 'QAS_Undated_A_MN_BR']);
+  });
+
+  it('orders items within an outlet by name, not by arrival', () => {
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Alpha_A_MN_BR', 1, 1, '2026-08-29T10:00:00Z', 'Zulu'),
+      row('QAS_Alpha_A_MN_BR', 2, 1, '2026-08-29T09:00:00Z', 'Alpha'),
+    ]);
+
+    expect(grouped[0]?.lines.map((l) => l.itemName)).toEqual(['Alpha', 'Zulu']);
+  });
+
+  it('returns nothing for no rows', () => {
+    expect(stock.groupStockByOutlet([])).toEqual([]);
+  });
+
+  it('keeps a zero count, which is not the same as not counted', () => {
+    const grouped = stock.groupStockByOutlet([
+      row('QAS_Alpha_A_MN_BR', 1, 0, '2026-08-29T10:00:00Z'),
+    ]);
+
+    expect(grouped[0]?.lines[0]?.quantity).toBe(0);
+    expect(grouped[0]?.itemCount).toBe(1);
   });
 });

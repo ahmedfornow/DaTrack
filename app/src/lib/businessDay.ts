@@ -228,6 +228,21 @@ export function ksaCalendarDate(at: Instant): BusinessDate {
 }
 
 /**
+ * KSA `HH:mm` for a timestamp column, or `null` when there isn't one.
+ *
+ * Postgres hands back `timestamptz` as a string, and the obvious thing to do
+ * with it — `new Date(value).toLocaleTimeString()` — renders in whatever
+ * timezone the reader's device is set to. A supervisor on a laptop still set to
+ * UTC would read every stock count as three hours earlier than it happened.
+ * Parsing here keeps that decision inside the date authority.
+ */
+export function ksaClockTimeOf(value: string | null | undefined): string | null {
+  if (typeof value !== 'string' || value === '') return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ksaClockTime(ms);
+}
+
+/**
  * A full KSA timestamp, `DD/MM/YYYY, HH:mm:ss`.
  *
  * Matches what `toLocaleString('en-GB')` produces on a phone already set to

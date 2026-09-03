@@ -150,3 +150,168 @@ export async function saveCounts(
   }
   return ok(rows.length);
 }
+
+// ---------------------------------------------------------------------------
+// Supervisor read-back: what has actually been counted, by outlet
+// ---------------------------------------------------------------------------
+
+/**
+ * One item's latest count at an outlet.
+ *
+ * `itemName` keeps the catalog's full name; shortening for display is the
+ * view's job, the same way outlet names are handled everywhere else.
+ */
+export interface OutletStockLine {
+  readonly itemId: number;
+  readonly itemName: string;
+  readonly quantity: number;
+  readonly reportedAt: string | null;
+}
+
+export interface OutletStockReport {
+  /** Full raw `touch_points.name`, so the caller can shorten it consistently. */
+  readonly outlet: string;
+  readonly lines: readonly OutletStockLine[];
+  readonly itemCount: number;
+  /** Summed from the lines that actually print, so the two can never disagree. */
+  readonly totalUnits: number;
+  readonly lastReportedAt: string | null;
+}
+
+/** A raw joined row, before grouping. Exported so tests can build one. */
+export interface StockReportRow {
+  readonly outlet: string;
+  readonly itemId: number;
+  readonly itemName: string;
+  readonly quantity: number;
+  readonly reportedAt: string | null;
+}
+
+/**
+ * Groups raw rows into one block per outlet, keeping only the newest count for
+ * each item.
+ *
+ * That last part is a deliberate departure from the legacy screen, which lists
+ * every row it fetched. Over a month that prints the same item once per day —
+ * twenty rows deep, oldest values indistinguishable from current ones — which
+ * does not answer the question the screen exists to answer. A supervisor
+ * looking at stock wants to know what is on the shelf now, so each item appears
+ * once, at its most recent figure.
+ *
+ * Input must be ordered newest-first; the first row seen for an item wins.
+ * Outlets are ordered by most recent activity, so whoever counted last is at
+ * the top and an outlet that has gone quiet sinks.
+ */
+export function groupStockByOutlet(
+  rows: readonly StockReportRow[],
+): readonly OutletStockReport[] {
+  const byOutlet = new Map<string, Map<number, OutletStockLine>>();
+
+  for (const row of rows) {
+    let items = byOutlet.get(row.outlet);
+    if (items === undefined) {
+      items = new Map();
+      byOutlet.set(row.outlet, items);
+    }
+    // Newest-first input means an item already present is the fresher figure.
+    if (!items.has(row.itemId)) {
+      items.set(row.itemId, {
+        itemId: row.itemId,
+        itemName: row.itemName,
+        quantity: row.quantity,
+        reportedAt: row.reportedAt,
+      });
+    }
+  }
+
+  const reports: OutletStockReport[] = [];
+
+  for (const [outlet, items] of byOutlet) {
+    const lines = [...items.values()].sort((a, b) => a.itemName.localeCompare(b.itemName));
+    let totalUnits = 0;
+    let lastReportedAt: string | null = null;
+
+    for (const line of lines) {
+      totalUnits += line.quantity;
+      if (line.reportedAt !== null && (lastReportedAt === null || line.reportedAt > lastReportedAt)) {
+        lastReportedAt = line.reportedAt;
+      }
+    }
+
+    reports.push({ outlet, lines, itemCount: lines.length, totalUnits, lastReportedAt });
+  }
+
+  return reports.sort((a, b) => {
+    if (a.lastReportedAt === b.lastReportedAt) return a.outlet.localeCompare(b.outlet);
+    if (a.lastReportedAt === null) return 1;
+    if (b.lastReportedAt === null) return -1;
+    return b.lastReportedAt.localeCompare(a.lastReportedAt);
+  });
+}
+
+/** Parses one joined row, tolerating PostgREST returning an embed as an array. */
+function parseReportRow(row: unknown): StockReportRow | null {
+  if (row === null || row === undefined || typeof row !== 'object') return null;
+  const record = row as Row;
+
+  const embedded = (value: unknown): Row | null => {
+    const inner = Array.isArray(value) ? value[0] : value;
+    return inner !== null && typeof inner === 'object' ? (inner as Row) : null;
+  };
+
+  const item = embedded(record['stock_catalog']);
+  const attendance = embedded(record['attendance']);
+  const outletRow = attendance === null ? null : embedded(attendance['touch_points']);
+
+  const itemId = record['item_id'];
+  const quantity = record['quantity'];
+  const reportedAt = record['reported_at'];
+  const itemName = item?.['item_name'];
+  const outlet = outletRow?.['name'];
+
+  if (typeof itemId !== 'number' || typeof quantity !== 'number') return null;
+  if (typeof itemName !== 'string' || itemName === '') return null;
+  // A stock report always hangs off an attendance row that has an outlet, so a
+  // row without one is malformed rather than a leave day — drop it instead of
+  // inventing a bucket to file it under.
+  if (typeof outlet !== 'string' || outlet === '') return null;
+
+  return {
+    outlet,
+    itemId,
+    itemName,
+    quantity,
+    reportedAt: typeof reportedAt === 'string' ? reportedAt : null,
+  };
+}
+
+/**
+ * The counts submitted in a period, city-scoped, grouped by outlet.
+ *
+ * City scoping is server-side through the attendance row's outlet, which is the
+ * same join the sales queries use. Filtering only the outlet list and not the
+ * rows is the mistake that has inflated supervisor figures before.
+ */
+export async function loadOutletCounts(
+  city: string,
+  since: string,
+  limit = 2000,
+): Promise<Result<readonly OutletStockReport[]>> {
+  const { data, error } = await db
+    .from('stock_reports')
+    .select(
+      'item_id, quantity, reported_at, stock_catalog(item_name), attendance!inner(touch_points!inner(name, city))',
+    )
+    .gte('reported_at', `${since}T00:00:00`)
+    .eq('attendance.touch_points.city', city)
+    .order('reported_at', { ascending: false })
+    .limit(limit);
+
+  if (error) return failFrom(error, { action: 'قراءة جرد المواقع' });
+
+  const rows = (data ?? [])
+    .map(parseReportRow)
+    .filter((row): row is StockReportRow => row !== null);
+
+  return ok(groupStockByOutlet(rows));
+}

@@ -12,13 +12,12 @@
 
 import { useState, type ReactNode } from 'react';
 import { businessMonth, businessToday } from '../../lib/businessDay';
-import { MONTH_LABEL, ROLE_LABEL, SHIFT_LABEL, TASK_KIND_LABEL, WEEKDAY_LABEL } from '../../domain/labels';
+import { MONTH_LABEL, ROLE_LABEL, SHIFT_LABEL } from '../../domain/labels';
 import { shiftsFor } from '../../domain/rules';
 import { shortOutletName } from '../../domain/text';
-import { Role, TaskKind, type Shift } from '../../domain/values';
+import { Role, type Shift } from '../../domain/values';
 import type { Outlet } from '../../data/outlets';
 import type { TeamMember } from '../../data/supervisor';
-import { isOverdue, type SupTask } from '../../data/tasks';
 import { buildTeamLogins } from '../reports/teamLogins';
 import { targetKey, type TargetTable } from '../../data/targets';
 
@@ -27,7 +26,6 @@ export interface AdminPanelProps {
   readonly outlets: readonly Outlet[];
   readonly targets: TargetTable;
   readonly team: readonly TeamMember[];
-  readonly tasks: readonly SupTask[];
   readonly busy: boolean;
   readonly notice: string | null;
   readonly onSaveTargets: (
@@ -36,10 +34,6 @@ export interface AdminPanelProps {
   readonly onToggleOutlet: (id: number, active: boolean) => void;
   readonly onSaveMember: (id: string, fullName: string, loginNumber: string) => void;
   readonly onToggleMember: (id: string, active: boolean) => void;
-  readonly onAddTask: (title: string, kind: SupTask['kind'], weekday: number | null) => void;
-  readonly onToggleTask: (id: number, done: boolean) => void;
-  readonly onRemoveTask: (id: number) => void;
-  readonly onResetTasks: () => void;
 }
 
 export function AdminPanel(props: AdminPanelProps) {
@@ -80,16 +74,6 @@ export function AdminPanel(props: AdminPanelProps) {
         />
       </Accordion>
 
-      <Accordion title="متابعاتي" count={props.tasks.filter((t) => !t.done).length}>
-        <TasksSection
-          tasks={props.tasks}
-          busy={props.busy}
-          onAdd={props.onAddTask}
-          onToggle={props.onToggleTask}
-          onRemove={props.onRemoveTask}
-          onReset={props.onResetTasks}
-        />
-      </Accordion>
     </div>
   );
 }
@@ -428,162 +412,6 @@ function UsersSection({
 }
 
 // ---------------------------------------------------------------------------
-
-function TasksSection({
-  tasks,
-  busy,
-  onAdd,
-  onToggle,
-  onRemove,
-  onReset,
-}: {
-  tasks: readonly SupTask[];
-  busy: boolean;
-  onAdd: (title: string, kind: SupTask['kind'], weekday: number | null) => void;
-  onToggle: (id: number, done: boolean) => void;
-  onRemove: (id: number) => void;
-  onReset: () => void;
-}) {
-  const [title, setTitle] = useState('');
-  const [kind, setKind] = useState<SupTask['kind']>('daily');
-  const [weekday, setWeekday] = useState(0);
-  const today = businessToday();
-
-  return (
-    <>
-      {tasks.length === 0 ? (
-        <Empty>لا مهام — أضف أول مهمة</Empty>
-      ) : (
-        <ul className="mb-4">
-          {tasks.map((task) => (
-            <li
-              key={task.id}
-              className="flex items-center gap-2 border-b border-line-soft py-1.5 last:border-0"
-            >
-              {/*
-                The visual box stays 24px, but the tappable area is a full 48.
-                A 24px target is a miss waiting to happen on a phone, and the
-                miss here silently marks the wrong task done.
-              */}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onToggle(task.id, !task.done)}
-                aria-pressed={task.done}
-                aria-label={task.title}
-                className="flex min-h-tap w-9 shrink-0 items-center justify-center disabled:opacity-40"
-              >
-                <span
-                  aria-hidden="true"
-                  className={`flex h-6 w-6 items-center justify-center rounded-lg border text-sm ${
-                    task.done
-                      ? 'border-achieved bg-achieved/10 text-achieved'
-                      : 'border-line text-transparent'
-                  }`}
-                >
-                  ✓
-                </span>
-              </button>
-              <span className={`flex-1 text-sm ${task.done ? 'text-muted line-through' : 'text-ink'}`}>
-                {task.title}
-              </span>
-              <span
-                className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${
-                  isOverdue(task, today)
-                    ? 'border-behind/30 bg-behind/10 text-behind'
-                    : 'border-line-soft text-muted'
-                }`}
-              >
-                {task.kind === 'weekly'
-                  ? (WEEKDAY_LABEL[task.weekday ?? 0] ?? '')
-                  : task.kind === 'once'
-                    ? (task.dueDate ?? TASK_KIND_LABEL.once)
-                    : TASK_KIND_LABEL.daily}
-              </span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onRemove(task.id)}
-                aria-label={`حذف ${task.title}`}
-                className="min-h-tap w-9 shrink-0 text-behind disabled:opacity-40"
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <label htmlFor="task-title" className="mb-1.5 block text-xs text-muted">
-        إضافة مهمة
-      </label>
-      <input
-        id="task-title"
-        type="text"
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="مثال: مراجعة تقرير المبيعات"
-        className="min-h-tap w-full rounded-control border border-line-soft bg-surface-raised px-3 text-sm text-ink"
-      />
-
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        {TaskKind.values.map((option) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={kind === option}
-            onClick={() => setKind(option)}
-            className={`min-h-tap rounded-control border text-xs transition-colors ${
-              kind === option
-                ? 'border-gold bg-gold/10 font-bold text-gold'
-                : 'border-line-soft bg-surface-raised text-ink'
-            }`}
-          >
-            {TASK_KIND_LABEL[option]}
-          </button>
-        ))}
-      </div>
-
-      {kind === 'weekly' && (
-        <select
-          value={weekday}
-          onChange={(event) => setWeekday(Number(event.target.value))}
-          aria-label="يوم الأسبوع"
-          className="mt-2 min-h-tap w-full rounded-control border border-line-soft bg-surface-raised px-3 text-sm text-ink"
-        >
-          {WEEKDAY_LABEL.map((label, index) => (
-            <option key={label} value={index}>
-              {label}
-            </option>
-          ))}
-        </select>
-      )}
-
-      <button
-        type="button"
-        disabled={busy || title.trim() === ''}
-        onClick={() => {
-          onAdd(title, kind, kind === 'weekly' ? weekday : null);
-          setTitle('');
-        }}
-        className="mt-2 min-h-tap w-full rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo text-sm font-bold text-on-gold disabled:opacity-40"
-      >
-        إضافة
-      </button>
-
-      {tasks.some((task) => task.done) && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onReset}
-          className="mt-2 min-h-tap w-full rounded-control border border-line text-xs text-muted disabled:opacity-40"
-        >
-          إعادة تعيين العلامات
-        </button>
-      )}
-    </>
-  );
-}
 
 // ---------------------------------------------------------------------------
 

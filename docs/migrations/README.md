@@ -60,6 +60,7 @@ Re-running a file is safe. Each one guards its own statements with
 | # | File | What it adds | Applied |
 |---|---|---|---|
 | 001 | [`001_client_op_id.sql`](001_client_op_id.sql) | `client_op_id` on `attendance` and `sell_operations`, plus partial unique indexes, so a retried offline write cannot duplicate | **2026-08-29** |
+| 002 | [`002_notes.sql`](002_notes.sql) | `notes` — free-text notes private to their owner, with RLS and an `updated_at` trigger | not yet |
 
 Migration 001 is verified: both columns exist, both length checks hold, and both partial
 unique indexes on `(promoter_id, client_op_id)` are present. The whole file runs inside one

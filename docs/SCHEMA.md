@@ -80,6 +80,9 @@ One row per promoter per day per shift. The anchor for sales and stock.
 | `touch_point_id` | bigint NULL | Null for leave days |
 | `shift` | shift **NOT NULL**, default `day` | Carries no meaning on a leave row — see below |
 | `status` | text | `work`, `off`, `sick`, `leave`, `absent` |
+| `guided_trials` | int | Set when the end-of-shift report is generated |
+| `checked_in_at` | timestamptz | |
+| `client_op_id` | text NULL | Idempotency tag — see below. Null for every row predating migration 001 |
 
 > `shift` is not nullable. A leave row silently takes the default `day`, which has two
 > consequences the database will not stop: a promoter marked `off` who signs in for a
@@ -87,9 +90,6 @@ One row per promoter per day per shift. The anchor for sales and stock.
 > shift" — describing something that did not happen; and the same promoter *can* sign in
 > for a **night** shift, ending up off and working at once. `findSignInConflict` in
 > `app/src/data/attendance.ts` exists to cover both.
-| `guided_trials` | int | Set when the end-of-shift report is generated |
-| `checked_in_at` | timestamptz | |
-| `client_op_id` | text NULL | Idempotency tag — see below. Null for every row predating migration 001 |
 
 **UNIQUE (`promoter_id`, `work_date`, `shift`)** — surfaces as error `23505`.
 
@@ -210,6 +210,25 @@ Supervisor's private reminders. Owner-scoped by RLS.
 | `weekday` | smallint NULL | 0–6, for `weekly` |
 | `due_date` | date NULL | for `once` |
 | `done` | boolean | Manual reset — no auto-rollover |
+
+### `notes`
+Free-text notes, private to their owner. Added by migration 002.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint PK | identity |
+| `owner_id` | uuid | FK → `users`. Only this user can read or write the row |
+| `body` | text | 1–5000 chars, CHECK constrained. One column by design — the list derives a heading from the first line |
+| `created_at` | timestamptz | |
+| `updated_at` | timestamptz | Maintained by the `notes_touch_updated_at` trigger, never sent by the client |
+
+Index `notes_owner_updated_idx (owner_id, updated_at desc)` — the only access
+pattern. RLS is four separate permissive policies (select/insert/update/delete),
+each `owner_id = auth.uid()`, so a change to one verb cannot silently widen the
+others.
+
+`owner_id` is a plain uuid rather than anything role-specific, so promoters can
+be given notes later without a schema change.
 
 ### `surveys` / `survey_responses`
 **Empty and unused.** Either build on them or drop them; do not leave them ambiguous.

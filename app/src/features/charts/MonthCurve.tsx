@@ -48,10 +48,16 @@ export function MonthCurve({ points, title, empty = 'لا بيانات بعد' }
 
   // One scale for both lines. A dual axis would flatter whichever line is
   // smaller and hide exactly the gap this chart exists to show.
-  const max = Math.max(
+  const peak = Math.max(
     1,
     ...points.map((point) => Math.max(point.cumulativeLas, point.cumulativeTarget)),
   );
+
+  // Headroom, so the top line never sits flush against the top edge.
+  // Cumulative series are flat wherever selling stopped, and a flat line hard
+  // against the ceiling reads as a maxed-out month rather than a stalled one —
+  // worst in the no-target case, where a single sale filled the whole frame.
+  const max = peak * 1.15;
 
   const actual = path(points, (point) => point.cumulativeLas, max);
   const target = path(points, (point) => point.cumulativeTarget, max);

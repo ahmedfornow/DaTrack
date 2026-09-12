@@ -25,6 +25,8 @@ import * as routePlansData from '../../data/routePlans';
 import type { PlanMap } from '../../data/routePlans';
 import type { RouteOutlet } from '../reports/routePlanMessage';
 import { AdminPanel } from './AdminPanel';
+import { NotesPanel } from './NotesPanel';
+import * as notesData from '../../data/notes';
 import * as targetsData from '../../data/targets';
 import * as tasksData from '../../data/tasks';
 import type { Outlet } from '../../data/outlets';
@@ -33,13 +35,14 @@ import type { SupTask } from '../../data/tasks';
 import type { PeriodKind } from '../reports/periodSummary';
 import type { StatusReport } from './status';
 
-type SupervisorTab = 'status' | 'overview' | 'team' | 'plan' | 'admin';
+type SupervisorTab = 'status' | 'overview' | 'team' | 'plan' | 'notes' | 'admin';
 
 const TABS: { id: SupervisorTab; label: string }[] = [
   { id: 'status', label: 'الوضع' },
   { id: 'overview', label: 'الإجماليات' },
   { id: 'team', label: 'الفريق' },
   { id: 'plan', label: 'الخطة' },
+  { id: 'notes', label: 'مذكرة' },
   { id: 'admin', label: 'إدارة' },
 ];
 
@@ -142,6 +145,44 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
     if (tab !== 'admin') return;
     void loadAdmin();
   }, [tab, loadAdmin]);
+
+  // --- Notes tab ----------------------------------------------------------
+  // Notes and reminders are both owner-scoped, so this tab loads on its own
+  // and never depends on the city the supervisor is looking at.
+  const [notes, setNotes] = useState<readonly notesData.Note[]>([]);
+  const [notesNotice, setNotesNotice] = useState<string | null>(null);
+
+  const loadNotesTab = useCallback(async () => {
+    const [noteResult, taskResult] = await Promise.all([
+      notesData.listNotes(profile.id),
+      tasksData.listTasks(profile.id),
+    ]);
+    if (noteResult.ok) setNotes(noteResult.data);
+    else setError(noteResult.error.message);
+    if (taskResult.ok) setAdminTasks(taskResult.data);
+  }, [profile.id]);
+
+  useEffect(() => {
+    if (tab !== 'notes') return;
+    void loadNotesTab();
+  }, [tab, loadNotesTab]);
+
+  const runNotes = async (
+    action: () => Promise<{ ok: true; data: unknown } | { ok: false; error: { message: string } }>,
+    success: string,
+  ) => {
+    setSaving(true);
+    const result = await action();
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setError(null);
+    setNotesNotice(success);
+    window.setTimeout(() => setNotesNotice(null), 2500);
+    await loadNotesTab();
+  };
 
   const flashAdmin = (message: string) => {
     setAdminNotice(message);
@@ -277,7 +318,7 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
         </div>
       )}
 
-      <div role="tablist" className="mb-3 flex gap-1.5">
+      <div role="tablist" className="mb-3 grid grid-cols-3 gap-1.5">
         {TABS.map((entry) => (
           <button
             key={entry.id}
@@ -354,6 +395,42 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
         />
       )}
 
+      {tab === 'notes' && (
+        <NotesPanel
+          notes={notes}
+          busy={saving}
+          notice={notesNotice}
+          onCreate={(body) =>
+            void runNotes(() => notesData.createNote(profile.id, body), 'حُفظت الملاحظة')
+          }
+          onUpdate={(id, body) =>
+            void runNotes(() => notesData.updateNote(id, profile.id, body), 'تم الحفظ')
+          }
+          onRemove={(id) =>
+            void runNotes(() => notesData.removeNote(id, profile.id), 'تم الحذف')
+          }
+          tasks={
+            isManager
+              ? undefined
+              : {
+                  tasks: adminTasks,
+                  busy: saving,
+                  onAdd: (title, kind, weekday) =>
+                    void runNotes(
+                      () => tasksData.addTask(profile.id, { title, kind, weekday, dueDate: null }),
+                      'تمت الإضافة',
+                    ),
+                  onToggle: (id, done) =>
+                    void runNotes(() => tasksData.setTaskDone(id, profile.id, done), 'تم التحديث'),
+                  onRemove: (id) =>
+                    void runNotes(() => tasksData.removeTask(id, profile.id), 'تم الحذف'),
+                  onReset: () =>
+                    void runNotes(() => tasksData.resetTasks(profile.id), 'تمت إعادة التعيين'),
+                }
+          }
+        />
+      )}
+
       {tab === 'admin' &&
         (isManager ? (
           <p className="rounded-card border border-line bg-surface px-4 py-6 text-center text-sm text-muted">
@@ -365,7 +442,6 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
             outlets={adminOutlets}
             targets={adminTargets}
             team={adminTeam}
-            tasks={adminTasks}
             busy={saving}
             notice={adminNotice}
             onSaveTargets={(entries) =>
@@ -388,21 +464,6 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
                 () => supervisorData.setMemberActive(id, active),
                 active ? 'تم التفعيل' : 'تم الإيقاف',
               )
-            }
-            onAddTask={(title, kind, weekday) =>
-              void runAdmin(
-                () => tasksData.addTask(profile.id, { title, kind, weekday, dueDate: null }),
-                'تمت الإضافة',
-              )
-            }
-            onToggleTask={(id, done) =>
-              void runAdmin(() => tasksData.setTaskDone(id, profile.id, done), 'تم التحديث')
-            }
-            onRemoveTask={(id) =>
-              void runAdmin(() => tasksData.removeTask(id, profile.id), 'تم الحذف')
-            }
-            onResetTasks={() =>
-              void runAdmin(() => tasksData.resetTasks(profile.id), 'تمت إعادة التعيين')
             }
           />
         ))}

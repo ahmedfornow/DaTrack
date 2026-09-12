@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { toDataError, fail, ok, invalid, type Result } from './errors';
 import * as stock from './stock';
+import * as notes from './notes';
 import {
   conflictMessage,
   findSignInConflict,
@@ -395,5 +396,109 @@ describe('groupStockByOutlet', () => {
 
     expect(grouped[0]?.lines[0]?.quantity).toBe(0);
     expect(grouped[0]?.itemCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+describe('cleanNoteBody', () => {
+  it('normalises Windows line endings', () => {
+    // The same note must not render differently depending on which device
+    // typed it.
+    expect(notes.cleanNoteBody('one\r\ntwo\rthree')).toBe('one\ntwo\nthree');
+  });
+
+  it('keeps the line breaks that make a note a note', () => {
+    expect(notes.cleanNoteBody('call Ahmed\nabout the Buraidah stock')).toBe(
+      'call Ahmed\nabout the Buraidah stock',
+    );
+  });
+
+  it('collapses a wall of blank lines from a pasted chat', () => {
+    expect(notes.cleanNoteBody('one\n\n\n\n\ntwo')).toBe('one\n\ntwo');
+  });
+
+  it('strips trailing spaces but leaves deliberate indentation', () => {
+    // Indentation inside the note survives — someone may be lining up a list.
+    // Leading whitespace on the very first line does not, because the final
+    // trim also removes the blank lines a paste tends to arrive with.
+    expect(notes.cleanNoteBody('aligned   \n    indented  ')).toBe('aligned\n    indented');
+  });
+
+  it('trims the ends', () => {
+    expect(notes.cleanNoteBody('\n\n  hello  \n\n')).toBe('hello');
+  });
+
+  it('bounds the body at the length the check constraint allows', () => {
+    const long = 'x'.repeat(notes.MAX_NOTE_LENGTH + 500);
+    expect(notes.cleanNoteBody(long)).toHaveLength(notes.MAX_NOTE_LENGTH);
+  });
+
+  it('is idempotent — cleaning a clean note changes nothing', () => {
+    const once = notes.cleanNoteBody('one\n\ntwo\nthree');
+    expect(notes.cleanNoteBody(once)).toBe(once);
+  });
+});
+
+describe('noteTitle and notePreview', () => {
+  it('takes the first non-empty line as the heading', () => {
+    expect(notes.noteTitle('\n\nSupplier call\nask about delivery')).toBe('Supplier call');
+  });
+
+  it('previews everything after the heading on one line', () => {
+    expect(notes.notePreview('Supplier call\nask about\n  delivery')).toBe('ask about delivery');
+  });
+
+  it('gives an empty preview for a one-line note', () => {
+    expect(notes.notePreview('just this')).toBe('');
+  });
+
+  it('handles an empty body without throwing', () => {
+    expect(notes.noteTitle('')).toBe('');
+    expect(notes.notePreview('')).toBe('');
+  });
+
+  it('handles a body that is only whitespace', () => {
+    expect(notes.noteTitle('   \n\n  ')).toBe('');
+    expect(notes.notePreview('   \n\n  ')).toBe('');
+  });
+});
+
+describe('validateNote', () => {
+  it('rejects an empty note before the database can', () => {
+    expect(notes.validateNote('')).not.toBeNull();
+    expect(notes.validateNote('   \n\n ')).not.toBeNull();
+  });
+
+  it('accepts anything with real content', () => {
+    expect(notes.validateNote('x')).toBeNull();
+  });
+});
+
+describe('parseNote', () => {
+  const row = { id: 7, body: 'hello', created_at: '2026-09-12T10:00:00Z', updated_at: null };
+
+  it('reads a full row', () => {
+    expect(notes.parseNote(row)).toEqual({
+      id: 7,
+      body: 'hello',
+      createdAt: '2026-09-12T10:00:00Z',
+      updatedAt: null,
+    });
+  });
+
+  it('keeps an empty body rather than dropping the row', () => {
+    // The check constraint prevents this, but a parser that discarded the row
+    // would make a real note vanish from the list instead of showing as blank.
+    expect(notes.parseNote({ ...row, body: '' })?.body).toBe('');
+  });
+
+  it('rejects a row with no id or a non-string body', () => {
+    expect(notes.parseNote({ ...row, id: 'seven' })).toBeNull();
+    expect(notes.parseNote({ ...row, body: 42 })).toBeNull();
+    expect(notes.parseNote(null)).toBeNull();
+    expect(notes.parseNote('not a row')).toBeNull();
   });
 });

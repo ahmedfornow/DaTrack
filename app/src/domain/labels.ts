@@ -13,6 +13,9 @@
 
 import type {
   AttendanceStatus,
+  DisciplineAmount,
+  DisciplineKind,
+  DisciplineReason,
   PlanStatus,
   Role,
   Shift,
@@ -140,3 +143,23 @@ export function stockItemLabel(itemName: string): string {
   if (withoutBrand.startsWith('ILUMA i —')) return withoutBrand;
   return withoutBrand.replace(/^ILUMA i\s+/, '');
 }
+
+// ---------------------------------------------------------------------------
+// Discipline
+// ---------------------------------------------------------------------------
+
+export const DISCIPLINE_KIND_LABEL: Readonly<Record<DisciplineKind, string>> = {
+  warning: 'إنذار',
+  deduction: 'خصم',
+};
+
+export const DISCIPLINE_AMOUNT_LABEL: Readonly<Record<DisciplineAmount, string>> = {
+  half_day: 'نصف يوم',
+  full_day: 'يوم كامل',
+};
+
+export const DISCIPLINE_REASON_LABEL: Readonly<Record<DisciplineReason, string>> = {
+  no_show: 'عدم حضور',
+  late: 'تأخر عن الدوام',
+  other: 'أخرى',
+};

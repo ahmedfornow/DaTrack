@@ -199,7 +199,9 @@ Responses: `item_id`, `promoter_id`, `work_date`, `checked`.
 **UNIQUE (`item_id`, `promoter_id`, `work_date`)**.
 
 ### `sup_tasks`
-Supervisor's private reminders. Owner-scoped by RLS.
+Reminders **shared between the supervisor and the manager** since migration 003.
+Was owner-scoped; `owner_id` still records who created a row and the UI shows it,
+but it no longer restricts who may read or tick one.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -230,6 +232,30 @@ others.
 `owner_id` is a plain uuid rather than anything role-specific, so promoters can
 be given notes later without a schema change.
 
+### `discipline`
+Warnings and pay deductions against a promoter. Added by migration 003.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint PK | identity |
+| `promoter_id` | uuid | FK → `users` |
+| `work_date` | date | The day it happened, not the day it was typed — those differ after a night shift, and payroll wants the former |
+| `kind` | text | `warning` \| `deduction` |
+| `amount` | text NULL | `half_day` \| `full_day`. Required on a deduction, must be null on a warning |
+| `reason` | text | `no_show` \| `late` \| `other` |
+| `note` | text NULL | Required when `reason = 'other'`, max 500 chars |
+| `created_by` | uuid | FK → `users`. Supervisor or manager |
+| `created_at` | timestamptz | |
+
+**Readable by supervisor and manager only.** There is deliberately no promoter
+policy: a person cannot read the records about themselves, so nobody learns
+their pay was cut from a phone screen before someone has spoken to them. That is
+a decision about how the team is managed, not an oversight.
+
+Constraints worth knowing: `discipline_amount_matches_kind` ties the amount to
+the kind in both directions, and `discipline_other_needs_note` stops an
+unexplained `other`.
+
 ### `surveys` / `survey_responses`
 **Empty and unused.** Either build on them or drop them; do not leave them ambiguous.
 
@@ -241,7 +267,7 @@ be given notes later without a schema change.
 |---|---|
 | `promoter` | Own rows only. Can insert attendance, sales, stock, checklist responses |
 | `supervisor` | Everything in their own `city`. Can delete sales and attendance |
-| `manager` | Read-only, all cities |
+| `manager` | Read-only across all cities for operational data. **Writes** to `discipline` and the shared `sup_tasks` — see those tables |
 
 Policies are **permissive** (OR-ed). A restrictive policy would AND with the others — if
 one is ever added, it can veto rows the others allow, which is hard to diagnose.

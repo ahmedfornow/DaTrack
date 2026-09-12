@@ -24,8 +24,7 @@ export interface NotesPanelProps {
   readonly onCreate: (body: string) => void;
   readonly onUpdate: (id: number, body: string) => void;
   readonly onRemove: (id: number) => void;
-  /** Omitted for a manager: `sup_tasks` is the supervisor's own list. */
-  readonly tasks?: TasksSectionProps | undefined;
+  readonly tasks: TasksSectionProps;
 }
 
 export function NotesPanel({
@@ -178,18 +177,16 @@ export function NotesPanel({
         )}
       </section>
 
-      {/* --- Reminders, moved here from the Admin tab ------------------- */}
-      {tasks !== undefined && (
-        <section className="rounded-card border border-line bg-surface p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-md font-bold text-ink">متابعاتي</h2>
-            <span className="tabular text-xs text-muted" dir="ltr">
-              {tasks.tasks.filter((task) => !task.done).length}
-            </span>
-          </div>
-          <TasksSection {...tasks} />
-        </section>
-      )}
+      {/* --- The shared list, moved here from the Admin tab -------------- */}
+      <section className="rounded-card border border-line bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-md font-bold text-ink">متابعاتي</h2>
+          <span className="tabular text-xs text-muted" dir="ltr">
+            {tasks.tasks.filter((task) => !task.done).length}
+          </span>
+        </div>
+        <TasksSection {...tasks} />
+      </section>
     </div>
   );
 }

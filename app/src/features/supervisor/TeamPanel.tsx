@@ -23,6 +23,11 @@ export interface TeamPanelProps {
   readonly byDevice: readonly CountedItem[];
   readonly byColor: readonly CountedItem[];
   readonly totalSales: number;
+  /**
+   * Rendered as the last accordion. Passed in rather than built here because
+   * it needs the team list and the write handlers, which live with the flow.
+   */
+  readonly discipline?: React.ReactNode;
   readonly stock: readonly OutletStockReport[];
 }
 
@@ -47,6 +52,7 @@ export function TeamPanel({
   byDevice,
   byColor,
   totalSales,
+  discipline,
   stock,
 }: TeamPanelProps) {
   return (
@@ -239,6 +245,10 @@ export function TeamPanel({
           </ul>
         )}
       </Accordion>
+
+      {discipline !== undefined && (
+        <Accordion title="الإنذارات والخصومات">{discipline}</Accordion>
+      )}
     </div>
   );
 }

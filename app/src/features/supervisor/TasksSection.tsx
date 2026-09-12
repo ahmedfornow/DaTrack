@@ -1,5 +1,5 @@
 /**
- * The supervisor's to-do list.
+ * The shared to-do list.
  *
  * Lived inside the Admin tab until it moved here, which is why it was hard to
  * find: four accordions deep, on the fifth tab, behind a heading about
@@ -7,6 +7,11 @@
  *
  * Reminders and notes are the same job from the user's side: things to
  * remember. They now sit on one screen.
+ *
+ * Since migration 003 the list is shared between the supervisor and the
+ * manager, so each row shows who added it and either of them can tick or
+ * delete any item. A shared list where only the author can close things is not
+ * a shared list.
  */
 
 import { useState, type ReactNode } from 'react';
@@ -17,6 +22,10 @@ import { isOverdue, type SupTask } from '../../data/tasks';
 
 export interface TasksSectionProps {
   readonly tasks: readonly SupTask[];
+  /** Names by user id, so a shared item can say who asked for it. */
+  readonly names: ReadonlyMap<string, string>;
+  /** Whoever is looking. Their own items carry no "from" badge. */
+  readonly currentUserId: string;
   readonly busy: boolean;
   readonly onAdd: (title: string, kind: SupTask['kind'], weekday: number | null) => void;
   readonly onToggle: (id: number, done: boolean) => void;
@@ -26,6 +35,8 @@ export interface TasksSectionProps {
 
 export function TasksSection({
   tasks,
+  names,
+  currentUserId,
   busy,
   onAdd,
   onToggle,
@@ -72,8 +83,20 @@ export function TasksSection({
                   ✓
                 </span>
               </button>
-              <span className={`flex-1 text-sm ${task.done ? 'text-muted line-through' : 'text-ink'}`}>
-                {task.title}
+              <span className="flex-1 min-w-0">
+                <span
+                  className={`block truncate text-sm ${task.done ? 'text-muted line-through' : 'text-ink'}`}
+                >
+                  {task.title}
+                </span>
+                {/* The list is shared, so an item nobody claims is an item
+                    nobody chases. Own items stay unlabelled — that would be
+                    noise on every row. */}
+                {task.ownerId !== '' && task.ownerId !== currentUserId && (
+                  <span className="block truncate text-xs text-faint">
+                    من {names.get(task.ownerId) ?? '—'}
+                  </span>
+                )}
               </span>
               <span
                 className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${

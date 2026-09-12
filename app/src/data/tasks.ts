@@ -1,10 +1,14 @@
 /**
- * The supervisor's private reminders (`sup_tasks`).
+ * The shared reminders list (`sup_tasks`).
  *
- * Owner-scoped by RLS: only the person who created a task can read or write it.
- * Every query here also filters on `owner_id` explicitly — RLS is the boundary,
- * but a query that relies on it silently returns nothing when it drifts, and a
- * silently empty task list looks like a completed one.
+ * Was private to whoever wrote a row. Migration 003 widened RLS so the
+ * supervisor and the manager read and write one list, which is how work gets
+ * passed between them without leaving the app.
+ *
+ * `owner_id` survives that change and still records who created a row — the UI
+ * shows it, so "call the supplier" has a face attached. It no longer restricts
+ * who may read or tick a task: either of them can close any item, because a
+ * shared list where only the author can tick things is not shared.
  *
  * There is no auto-rollover. A daily task stays ticked until the supervisor
  * resets it, which is deliberate: an automatic reset overnight would erase the
@@ -21,6 +25,8 @@ const TASK_COLUMNS = 'id, owner_id, title, kind, weekday, due_date, done';
 
 export interface SupTask {
   readonly id: number;
+  /** Who wrote it. Shown so the other person knows where an item came from. */
+  readonly ownerId: string;
   readonly title: string;
   readonly kind: TaskKindValue;
   /** 0-6, Sunday first. Only meaningful for `weekly`. */
@@ -54,15 +60,20 @@ export function parseTask(row: unknown): SupTask | null {
       typeof weekday === 'number' && weekday >= 0 && weekday <= 6 ? weekday : null,
     dueDate: typeof dueDate === 'string' && dueDate !== '' ? dueDate : null,
     done: record['done'] === true,
+    ownerId: typeof record['owner_id'] === 'string' ? (record['owner_id'] as string) : '',
   };
 }
 
-/** Outstanding first, then grouped by kind — the order the supervisor works in. */
-export async function listTasks(ownerId: string): Promise<Result<SupTask[]>> {
+/**
+ * Outstanding first, then grouped by kind — the order the list is worked in.
+ *
+ * No owner filter: the list is shared, so scoping it would hide exactly the
+ * items the other person added.
+ */
+export async function listTasks(): Promise<Result<SupTask[]>> {
   const { data, error } = await db
     .from('sup_tasks')
     .select(TASK_COLUMNS)
-    .eq('owner_id', ownerId)
     .order('done')
     .order('kind')
     .order('id');
@@ -108,38 +119,25 @@ export async function addTask(ownerId: string, task: NewTask): Promise<Result<Su
   return parsed === null ? invalid('أُضيفت المهمة لكن تعذّرت قراءتها') : ok(parsed);
 }
 
-export async function setTaskDone(
-  taskId: number,
-  ownerId: string,
-  done: boolean,
-): Promise<Result<true>> {
-  const { error } = await db
-    .from('sup_tasks')
-    .update({ done })
-    .eq('id', taskId)
-    .eq('owner_id', ownerId);
+export async function setTaskDone(taskId: number, done: boolean): Promise<Result<true>> {
+  const { error } = await db.from('sup_tasks').update({ done }).eq('id', taskId);
 
   if (error) return failFrom(error, { action: 'تحديث المهمة' });
   return ok(true);
 }
 
-export async function removeTask(taskId: number, ownerId: string): Promise<Result<true>> {
-  const { error } = await db
-    .from('sup_tasks')
-    .delete()
-    .eq('id', taskId)
-    .eq('owner_id', ownerId);
+export async function removeTask(taskId: number): Promise<Result<true>> {
+  const { error } = await db.from('sup_tasks').delete().eq('id', taskId);
 
   if (error) return failFrom(error, { action: 'حذف المهمة' });
   return ok(true);
 }
 
 /** Clears every tick. Manual by design — see the note at the top of this file. */
-export async function resetTasks(ownerId: string): Promise<Result<true>> {
+export async function resetTasks(): Promise<Result<true>> {
   const { error } = await db
     .from('sup_tasks')
     .update({ done: false })
-    .eq('owner_id', ownerId)
     .eq('done', true);
 
   if (error) return failFrom(error, { action: 'إعادة تعيين المهام' });

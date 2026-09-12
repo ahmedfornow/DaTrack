@@ -131,3 +131,26 @@ export const StockCategory = vocabulary<StockCategory>('category', STOCK_CATEGOR
 const TASK_KIND_VALUES = ['daily', 'weekly', 'once'] as const;
 export type TaskKind = (typeof TASK_KIND_VALUES)[number];
 export const TaskKind = vocabulary<TaskKind>('kind', TASK_KIND_VALUES);
+
+// ---------------------------------------------------------------------------
+// Discipline
+// ---------------------------------------------------------------------------
+
+/**
+ * A written record is either a warning or money off the payslip. The
+ * distinction is not cosmetic: only one of them carries an amount, and the
+ * database enforces that pairing.
+ */
+const DISCIPLINE_KIND_VALUES = ['warning', 'deduction'] as const;
+export type DisciplineKind = (typeof DISCIPLINE_KIND_VALUES)[number];
+export const DisciplineKind = vocabulary<DisciplineKind>('kind', DISCIPLINE_KIND_VALUES);
+
+/** How much pay a deduction removes. Null on a warning, never on a deduction. */
+const DISCIPLINE_AMOUNT_VALUES = ['half_day', 'full_day'] as const;
+export type DisciplineAmount = (typeof DISCIPLINE_AMOUNT_VALUES)[number];
+export const DisciplineAmount = vocabulary<DisciplineAmount>('amount', DISCIPLINE_AMOUNT_VALUES);
+
+/** Why. `other` requires a written explanation — an unexplained 'other' is no reason at all. */
+const DISCIPLINE_REASON_VALUES = ['no_show', 'late', 'other'] as const;
+export type DisciplineReason = (typeof DISCIPLINE_REASON_VALUES)[number];
+export const DisciplineReason = vocabulary<DisciplineReason>('reason', DISCIPLINE_REASON_VALUES);

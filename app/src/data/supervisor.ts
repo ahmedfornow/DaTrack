@@ -21,7 +21,7 @@ import {
   type BusinessDate,
   type BusinessMonth,
 } from '../lib/businessDay';
-import { CustomerType, SaleType, Shift } from '../domain/values';
+import { AttendanceStatus, CustomerType, SaleType, Shift } from '../domain/values';
 import {
   aggregateCompliance,
   aggregateSales,
@@ -38,6 +38,14 @@ import { failFrom, invalid, ok, type Result } from './errors';
 import { oneLine } from '../domain/text';
 import { parseOutlet, type Outlet } from './outlets';
 import { loadOutletCounts, type OutletStockReport } from './stock';
+import * as outletsData from './outlets';
+import {
+  buildDailyActivity,
+  type ActivityAttendance,
+  type ActivitySale,
+  type ActivityTarget,
+  type DailyActivityRow,
+} from '../features/supervisor/dailyActivity';
 
 /** Everything the overview and team panels need for one period. */
 export interface DashboardData {
@@ -488,4 +496,107 @@ export async function claimSpare(
     });
   }
   return ok(true);
+}
+
+// ---------------------------------------------------------------------------
+// Daily activity — one row per promoter for a chosen day
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything {@link buildDailyActivity} needs, for one city and one date.
+ *
+ * Month-to-date is fetched alongside the day because the view shows both, and
+ * two round trips for numbers that appear on the same line is a slower screen
+ * for no benefit.
+ *
+ * City-scoped on both sides: the promoter list by city, and attendance and
+ * sales by those promoters' ids. Filtering one and not the other is how
+ * achievement percentages got inflated before — see lesson 3 in CLAUDE.md.
+ */
+export async function loadDailyActivity(
+  city: string,
+  date: BusinessDate,
+): Promise<Result<readonly DailyActivityRow[]>> {
+  const monthStart = `${date.slice(0, 7)}-01`;
+  const month = date.slice(0, 7);
+
+  const [teamResult, outletResult] = await Promise.all([
+    listTeam(city),
+    outletsData.listAll(city),
+  ]);
+  if (!teamResult.ok) return teamResult;
+  if (!outletResult.ok) return outletResult;
+
+  const promoters = teamResult.data
+    .filter((member) => member.role === 'promoter' && member.active)
+    .map((member) => ({ id: member.id, fullName: member.fullName }));
+
+  if (promoters.length === 0) return ok([]);
+  const promoterIds = promoters.map((promoter) => promoter.id);
+
+  const [attendanceResult, salesResult, targetResult] = await Promise.all([
+    db
+      .from('attendance')
+      .select('promoter_id, work_date, status, touch_point_id, shift')
+      .gte('work_date', monthStart)
+      .lte('work_date', date)
+      .in('promoter_id', promoterIds),
+    db
+      .from('sell_operations')
+      .select('promoter_id, work_date, customer_type')
+      .gte('work_date', monthStart)
+      .lte('work_date', date)
+      .in('promoter_id', promoterIds),
+    db.from('targets').select('touch_point_id, shift, daily_target').eq('month', month),
+  ]);
+
+  if (attendanceResult.error) {
+    return failFrom(attendanceResult.error, { action: 'قراءة التسجيلات' });
+  }
+  if (salesResult.error) return failFrom(salesResult.error, { action: 'قراءة المبيعات' });
+  if (targetResult.error) return failFrom(targetResult.error, { action: 'قراءة الأهداف' });
+
+  const attendance: ActivityAttendance[] = [];
+  for (const row of attendanceResult.data ?? []) {
+    const status = AttendanceStatus.tryParse(row.status);
+    if (status === null) continue;
+    attendance.push({
+      promoterId: row.promoter_id,
+      workDate: row.work_date,
+      status,
+      touchPointId: typeof row.touch_point_id === 'number' ? row.touch_point_id : null,
+      // A leave row carries the column default, which means nothing — see the
+      // note on `attendance.shift` in SCHEMA.md.
+      shift: status === 'work' ? Shift.tryParse(row.shift) : null,
+    });
+  }
+
+  const sales: ActivitySale[] = (salesResult.data ?? []).map((row) => ({
+    promoterId: row.promoter_id,
+    workDate: row.work_date,
+    customerType: row.customer_type,
+  }));
+
+  const targets: ActivityTarget[] = [];
+  for (const row of targetResult.data ?? []) {
+    const shift = Shift.tryParse(row.shift);
+    if (shift === null || typeof row.touch_point_id !== 'number') continue;
+    targets.push({
+      touchPointId: row.touch_point_id,
+      shift,
+      dailyTarget: Number(row.daily_target) || 0,
+    });
+  }
+
+  return ok(
+    buildDailyActivity({
+      date,
+      monthStart,
+      promoters,
+      outlets: outletResult.data.map((outlet) => ({ id: outlet.id, name: outlet.name })),
+      attendance,
+      sales,
+      targets,
+    }),
+  );
 }

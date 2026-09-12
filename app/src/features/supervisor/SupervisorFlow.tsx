@@ -26,6 +26,10 @@ import type { PlanMap } from '../../data/routePlans';
 import type { RouteOutlet } from '../reports/routePlanMessage';
 import { AdminPanel } from './AdminPanel';
 import { NotesPanel } from './NotesPanel';
+import { DailyActivityPanel } from './DailyActivityPanel';
+import { DisciplinePanel } from './DisciplinePanel';
+import type { DailyActivityRow } from './dailyActivity';
+import * as disciplineData from '../../data/discipline';
 import * as notesData from '../../data/notes';
 import * as targetsData from '../../data/targets';
 import * as tasksData from '../../data/tasks';
@@ -132,7 +136,7 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
       outletsData.listAll(city),
       targetsData.tableForMonth(),
       supervisorData.listTeam(city),
-      tasksData.listTasks(profile.id),
+      tasksData.listTasks(),
     ]);
     if (outletResult.ok) setAdminOutlets(outletResult.data);
     if (targetResult.ok) setAdminTargets(targetResult.data);
@@ -146,6 +150,64 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
     void loadAdmin();
   }, [tab, loadAdmin]);
 
+  // --- Daily activity, on the Status tab ----------------------------------
+  // The manager's first screen: every promoter, today, with the month beside
+  // it. Reloads whenever the city or the date changes.
+  const [activity, setActivity] = useState<readonly DailyActivityRow[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+
+  useEffect(() => {
+    if (tab !== 'status') return;
+    let live = true;
+    setActivityLoading(true);
+    void supervisorData.loadDailyActivity(city, date).then((result) => {
+      if (!live) return;
+      if (result.ok) setActivity(result.data);
+      else setError(result.error.message);
+      setActivityLoading(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [tab, city, date]);
+
+  // --- Discipline, on the Team tab ----------------------------------------
+  // Shared between supervisor and manager: either records one, both see all.
+  const [records, setRecords] = useState<readonly disciplineData.DisciplineRecord[]>([]);
+
+  // The team list comes along because the panel needs it for the promoter
+  // picker and to put a name against each record. `adminTeam` alone will not
+  // do: it loads on the Admin tab, which a manager never opens, so theirs
+  // would always be empty.
+  const loadDiscipline = useCallback(async () => {
+    const [recordResult, teamResult] = await Promise.all([
+      disciplineData.listRecent(),
+      supervisorData.listTeam(city),
+    ]);
+    if (recordResult.ok) setRecords(recordResult.data);
+    else setError(recordResult.error.message);
+    if (teamResult.ok) setAdminTeam(teamResult.data);
+  }, [city]);
+
+  useEffect(() => {
+    if (tab !== 'team') return;
+    void loadDiscipline();
+  }, [tab, loadDiscipline]);
+
+  const runDiscipline = async (
+    action: () => Promise<{ ok: true; data: unknown } | { ok: false; error: { message: string } }>,
+  ) => {
+    setSaving(true);
+    const result = await action();
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setError(null);
+    await loadDiscipline();
+  };
+
   // --- Notes tab ----------------------------------------------------------
   // Notes and reminders are both owner-scoped, so this tab loads on its own
   // and never depends on the city the supervisor is looking at.
@@ -153,14 +215,17 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
   const [notesNotice, setNotesNotice] = useState<string | null>(null);
 
   const loadNotesTab = useCallback(async () => {
-    const [noteResult, taskResult] = await Promise.all([
+    const [noteResult, taskResult, teamResult] = await Promise.all([
       notesData.listNotes(profile.id),
-      tasksData.listTasks(profile.id),
+      tasksData.listTasks(),
+      // Needed to turn an owner id into a name on a shared item.
+      supervisorData.listTeam(city),
     ]);
     if (noteResult.ok) setNotes(noteResult.data);
     else setError(noteResult.error.message);
     if (taskResult.ok) setAdminTasks(taskResult.data);
-  }, [profile.id]);
+    if (teamResult.ok) setAdminTeam(teamResult.data);
+  }, [profile.id, city]);
 
   useEffect(() => {
     if (tab !== 'notes') return;
@@ -340,6 +405,11 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
       {tab === 'status' && (
         <>
           <StatusStrip status={status} date={date} city={city} loading={loading} />
+
+          <div className="mt-2">
+            <DailyActivityPanel rows={activity} loading={activityLoading} />
+          </div>
+
           <button
             type="button"
             onClick={() => void refresh(city)}
@@ -376,6 +446,20 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
             byColor={dashboard.sales.byColor}
             totalSales={dashboard.sales.total}
             stock={dashboard.stock}
+            discipline={
+              <DisciplinePanel
+                records={records}
+                promoters={adminTeam
+                  .filter((member) => member.role === 'promoter' && member.active)
+                  .map((member) => ({ id: member.id, fullName: member.fullName }))}
+                names={new Map(adminTeam.map((member) => [member.id, member.fullName]))}
+                busy={saving}
+                onCreate={(record) =>
+                  void runDiscipline(() => disciplineData.createRecord(record, profile.id))
+                }
+                onRemove={(id) => void runDiscipline(() => disciplineData.removeRecord(id))}
+              />
+            }
           />
         ))}
 
@@ -410,10 +494,10 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
             void runNotes(() => notesData.removeNote(id, profile.id), 'تم الحذف')
           }
           tasks={
-            isManager
-              ? undefined
-              : {
+            {
                   tasks: adminTasks,
+                  names: new Map(adminTeam.map((member) => [member.id, member.fullName])),
+                  currentUserId: profile.id,
                   busy: saving,
                   onAdd: (title, kind, weekday) =>
                     void runNotes(
@@ -421,11 +505,11 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
                       'تمت الإضافة',
                     ),
                   onToggle: (id, done) =>
-                    void runNotes(() => tasksData.setTaskDone(id, profile.id, done), 'تم التحديث'),
+                    void runNotes(() => tasksData.setTaskDone(id, done), 'تم التحديث'),
                   onRemove: (id) =>
-                    void runNotes(() => tasksData.removeTask(id, profile.id), 'تم الحذف'),
+                    void runNotes(() => tasksData.removeTask(id), 'تم الحذف'),
                   onReset: () =>
-                    void runNotes(() => tasksData.resetTasks(profile.id), 'تمت إعادة التعيين'),
+                    void runNotes(() => tasksData.resetTasks(), 'تمت إعادة التعيين'),
                 }
           }
         />

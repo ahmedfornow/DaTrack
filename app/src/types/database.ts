@@ -157,6 +157,57 @@ export type Database = {
         }
         Relationships: []
       }
+      discipline: {
+        Row: {
+          amount: string | null
+          created_at: string
+          created_by: string
+          id: number
+          kind: string
+          note: string | null
+          promoter_id: string
+          reason: string
+          work_date: string
+        }
+        Insert: {
+          amount?: string | null
+          created_at?: string
+          created_by: string
+          id?: never
+          kind: string
+          note?: string | null
+          promoter_id: string
+          reason: string
+          work_date: string
+        }
+        Update: {
+          amount?: string | null
+          created_at?: string
+          created_by?: string
+          id?: never
+          kind?: string
+          note?: string | null
+          promoter_id?: string
+          reason?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discipline_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "discipline_promoter_id_fkey"
+            columns: ["promoter_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes: {
         Row: {
           body: string

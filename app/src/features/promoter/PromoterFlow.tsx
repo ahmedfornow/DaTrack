@@ -13,6 +13,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   addDays,
+  businessDayOfMonth,
+  businessMonth,
+  businessMonthStart,
   businessToday,
   isBusinessToday,
   type BusinessDate,
@@ -27,6 +30,7 @@ import * as outletsData from '../../data/outlets';
 import * as salesData from '../../data/sales';
 import * as stockData from '../../data/stock';
 import * as targetsData from '../../data/targets';
+import { buildMonthSeries, type MonthPoint } from '../charts/monthSeries';
 import type { Outlet } from '../../data/outlets';
 import type { Sale } from '../../data/sales';
 import { isOnline, startReplayLoop, writeQueue } from '../../lib/offline';
@@ -51,6 +55,7 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
   const [date, setDate] = useState<BusinessDate>(businessToday());
   const [daySessions, setDaySessions] = useState<readonly attendance.Session[]>([]);
   const [monthSessions, setMonthSessions] = useState<readonly attendance.Session[]>([]);
+  const [monthCurve, setMonthCurve] = useState<readonly MonthPoint[]>([]);
   const [sales, setSales] = useState<readonly Sale[]>([]);
   const [shortcuts, setShortcuts] = useState<readonly salesData.Combination[]>([]);
   const [dailyTarget, setDailyTarget] = useState<number | null>(null);
@@ -219,9 +224,41 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
   }, [phase, tab, profile.id]);
 
   const refreshMonth = useCallback(async () => {
-    const result = await attendance.sessionsThisMonth(profile.id);
+    const monthStart = businessMonthStart();
+    const [result, saleResult, targetResult] = await Promise.all([
+      attendance.sessionsThisMonth(profile.id),
+      salesData.listRecentForPromoter(profile.id, monthStart),
+      targetsData.tableForMonth(),
+    ]);
     if (result.ok) setMonthSessions(result.data);
     else setError(result.error.message);
+
+    // The curve needs all three, so a failure in any one leaves it empty
+    // rather than drawn from half the data — a chart missing its target line
+    // reads as "no target set", which is a different and wrong story.
+    if (result.ok && saleResult.ok && targetResult.ok) {
+      setMonthCurve(
+        buildMonthSeries({
+          month: businessMonth(),
+          throughDay: businessDayOfMonth(),
+          attendance: result.data.map((session) => ({
+            workDate: session.workDate,
+            status: session.status,
+            touchPointId: session.touchPointId,
+            shift: session.workingShift,
+          })),
+          sales: saleResult.data.map((sale) => ({
+            workDate: sale.workDate,
+            customerType: sale.customerType,
+          })),
+          targets: [...targetResult.data.values()].map((target) => ({
+            touchPointId: target.touchPointId,
+            shift: target.shift,
+            dailyTarget: target.dailyTarget,
+          })),
+        }),
+      );
+    }
   }, [profile.id]);
 
   useEffect(() => {
@@ -469,6 +506,7 @@ export function PromoterFlow({ profile, onSignedOut }: PromoterFlowProps) {
       checklistItems={checklistItems}
       checkedItems={checkedItems}
       monthSessions={monthSessions}
+      monthCurve={monthCurve}
       busy={busy}
       error={error}
       notice={notice}

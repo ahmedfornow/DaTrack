@@ -14,12 +14,13 @@ import { shortOutletName } from '../../domain/text';
 import { ksaClockTimeOf } from '../../lib/businessDay';
 import { stockItemLabel } from '../../domain/labels';
 import type { OutletStockReport } from '../../data/stock';
-import type { ComplianceRow, CountedItem, NamedTotals } from './aggregate';
+import { UNTAGGED_AREA, type AreaTotals, type ComplianceRow, type CountedItem, type NamedTotals } from './aggregate';
 
 export interface TeamPanelProps {
   readonly compliance: readonly ComplianceRow[];
   readonly byPromoter: readonly NamedTotals[];
   readonly byOutlet: readonly NamedTotals[];
+  readonly byArea: readonly AreaTotals[];
   readonly byDevice: readonly CountedItem[];
   readonly byColor: readonly CountedItem[];
   readonly totalSales: number;
@@ -49,6 +50,7 @@ export function TeamPanel({
   compliance,
   byPromoter,
   byOutlet,
+  byArea,
   byDevice,
   byColor,
   totalSales,
@@ -125,6 +127,43 @@ export function TeamPanel({
               />
             ))}
           </ul>
+        )}
+      </Accordion>
+
+      <Accordion title="مبيعات المناطق" count={byArea.length}>
+        {byArea.length === 0 ? (
+          <Empty>لا مبيعات في الفترة</Empty>
+        ) : (
+          <ul className="space-y-1.5">
+            {byArea.map((area) => (
+              <li
+                key={area.name}
+                className="flex items-center justify-between gap-3 rounded-control border border-line-soft bg-surface-raised px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p
+                    className={`truncate text-sm ${
+                      area.name === UNTAGGED_AREA ? 'text-muted' : 'text-ink'
+                    }`}
+                  >
+                    {area.name}
+                  </p>
+                  <p className="tabular truncate text-xs text-muted" dir="ltr">
+                    {area.outlets} outlets
+                    {area.lau > 0 && ` · LAU ${area.lau}`}
+                  </p>
+                </div>
+                <span className="tabular shrink-0 text-lg font-bold text-gold" dir="ltr">
+                  {area.las}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {byArea.some((area) => area.name === UNTAGGED_AREA) && (
+          <p className="mt-2 text-xs text-faint">
+            المواقع بدون منطقة تظهر تحت «{UNTAGGED_AREA}» — حددها من إدارة ← المواقع
+          </p>
         )}
       </Accordion>
 

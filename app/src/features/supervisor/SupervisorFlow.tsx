@@ -442,6 +442,7 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
             compliance={dashboard.compliance}
             byPromoter={dashboard.sales.byPromoter}
             byOutlet={dashboard.sales.byOutlet}
+            byArea={dashboard.byArea}
             byDevice={dashboard.sales.byDevice}
             byColor={dashboard.sales.byColor}
             totalSales={dashboard.sales.total}
@@ -530,6 +531,12 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
             notice={adminNotice}
             onSaveTargets={(entries) =>
               void runAdmin(() => targetsData.saveTargets(entries), 'حُفظت الأهداف')
+            }
+            onSaveOutletArea={(id, area) =>
+              void runAdmin(
+                () => outletsData.setOutletArea(id, area),
+                area.trim() === '' ? 'أُزيلت المنطقة' : 'حُددت المنطقة',
+              )
             }
             onToggleOutlet={(id, active) =>
               void runAdmin(

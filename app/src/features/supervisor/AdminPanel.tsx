@@ -32,6 +32,7 @@ export interface AdminPanelProps {
     entries: readonly { touchPointId: number; shift: Shift; dailyTarget: number; gtTarget: number }[],
   ) => void;
   readonly onToggleOutlet: (id: number, active: boolean) => void;
+  readonly onSaveOutletArea: (id: number, area: string) => void;
   readonly onSaveMember: (id: string, fullName: string, loginNumber: string) => void;
   readonly onToggleMember: (id: string, active: boolean) => void;
 }
@@ -61,7 +62,12 @@ export function AdminPanel(props: AdminPanelProps) {
       </Accordion>
 
       <Accordion title="المواقع" count={props.outlets.length}>
-        <OutletsSection outlets={props.outlets} busy={props.busy} onToggle={props.onToggleOutlet} />
+        <OutletsSection
+          outlets={props.outlets}
+          busy={props.busy}
+          onToggle={props.onToggleOutlet}
+          onSaveArea={props.onSaveOutletArea}
+        />
       </Accordion>
 
       <Accordion title="المستخدمون" count={props.team.length}>
@@ -202,11 +208,14 @@ function OutletsSection({
   outlets,
   busy,
   onToggle,
+  onSaveArea,
 }: {
   outlets: readonly Outlet[];
   busy: boolean;
   onToggle: (id: number, active: boolean) => void;
+  onSaveArea: (id: number, area: string) => void;
 }) {
+  const [editing, setEditing] = useState<number | null>(null);
   if (outlets.length === 0) return <Empty>لا مواقع</Empty>;
 
   return (
@@ -214,10 +223,11 @@ function OutletsSection({
       {outlets.map((outlet) => (
         <li
           key={outlet.id}
-          className={`flex items-center justify-between gap-3 rounded-control border border-line-soft bg-surface-raised px-3 py-2 ${
+          className={`rounded-control border border-line-soft bg-surface-raised px-3 py-2 ${
             outlet.active ? '' : 'opacity-50'
           }`}
         >
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm text-ink">{outlet.shortName}</p>
             <p className="truncate text-xs text-muted">
@@ -231,17 +241,103 @@ function OutletsSection({
               {outlet.mapsUrl !== null && ' · 📍'}
             </p>
           </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onToggle(outlet.id, !outlet.active)}
-            className="min-h-tap shrink-0 rounded-control border border-line px-3 text-xs text-muted disabled:opacity-40"
-          >
-            {outlet.active ? 'إيقاف' : 'تفعيل'}
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setEditing(editing === outlet.id ? null : outlet.id)}
+              aria-expanded={editing === outlet.id}
+              className={`min-h-tap rounded-control border px-3 text-xs disabled:opacity-40 ${
+                outlet.area === null
+                  ? 'border-line text-faint'
+                  : 'border-gold/40 bg-gold/10 text-gold'
+              }`}
+            >
+              {outlet.area ?? 'منطقة'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onToggle(outlet.id, !outlet.active)}
+              className="min-h-tap rounded-control border border-line px-3 text-xs text-muted disabled:opacity-40"
+            >
+              {outlet.active ? 'إيقاف' : 'تفعيل'}
+            </button>
+          </div>
+        </div>
+
+        {editing === outlet.id && (
+          <AreaEditor
+            initial={outlet.area ?? ''}
+            busy={busy}
+            onSave={(area) => {
+              onSaveArea(outlet.id, area);
+              setEditing(null);
+            }}
+            onCancel={() => setEditing(null)}
+          />
+        )}
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Tags one outlet with the town it is in.
+ *
+ * Free text rather than a dropdown: nobody has a canonical list of Qassim
+ * towns, and a dropdown built from the values already entered would make the
+ * first entry of any town impossible. The area roll-up trims and matches
+ * exactly, so the cost of that freedom is a typo splitting one town in two —
+ * visible immediately in the area list, and fixed by retyping it.
+ */
+function AreaEditor({
+  initial,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  initial: string;
+  busy: boolean;
+  onSave: (area: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+
+  return (
+    <div className="mt-2 border-t border-line-soft pt-2">
+      <label htmlFor="outlet-area" className="mb-1 block text-xs text-muted">
+        المنطقة — اتركها فارغة لإزالتها
+      </label>
+      <input
+        id="outlet-area"
+        type="text"
+        value={value}
+        maxLength={60}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder="مثال: بريدة"
+        className="min-h-tap w-full rounded-control border border-line-soft bg-surface px-3 text-sm text-ink"
+      />
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onSave(value)}
+          className="min-h-tap rounded-control bg-gradient-to-br from-gold-hi via-gold to-gold-lo text-sm font-bold text-on-gold disabled:opacity-40"
+        >
+          حفظ
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onCancel}
+          className="min-h-tap rounded-control border border-line text-sm text-muted disabled:opacity-40"
+        >
+          إلغاء
+        </button>
+      </div>
+    </div>
   );
 }
 

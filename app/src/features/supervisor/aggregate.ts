@@ -192,3 +192,56 @@ export function toOutletSummary(
 
 /** The display label for an outlet row. */
 export const outletLabel = (name: string): string => shortOutletName(name);
+
+// ---------------------------------------------------------------------------
+// By area
+// ---------------------------------------------------------------------------
+
+/**
+ * Rolls per-outlet totals up into the town each outlet sits in.
+ *
+ * Areas are recorded on the outlet, not parsed from its name — see migration
+ * 004 for why. Outlets nobody has tagged yet are grouped together and kept
+ * visible: dropping them would make the totals silently disagree with the rest
+ * of the dashboard, and a manager would have no way to tell that a quarter of
+ * the sales were missing.
+ */
+export const UNTAGGED_AREA = 'غير محدد';
+
+export interface AreaTotals extends NamedTotals {
+  /** How many outlets rolled into this area — 1 is a different story from 6. */
+  readonly outlets: number;
+}
+
+export function aggregateByArea(
+  byOutlet: readonly NamedTotals[],
+  areaOf: ReadonlyMap<string, string | null>,
+): readonly AreaTotals[] {
+  const totals = new Map<string, AreaTotals>();
+
+  for (const outlet of byOutlet) {
+    const area = areaOf.get(outlet.name) ?? null;
+    const label = area === null || area.trim() === '' ? UNTAGGED_AREA : area.trim();
+    const current =
+      totals.get(label) ??
+      ({ name: label, las: 0, lau: 0, sk: 0, mgm: 0, ld: 0, outlets: 0 } as AreaTotals);
+
+    totals.set(label, {
+      name: label,
+      las: current.las + outlet.las,
+      lau: current.lau + outlet.lau,
+      sk: current.sk + outlet.sk,
+      mgm: current.mgm + outlet.mgm,
+      ld: current.ld + outlet.ld,
+      outlets: current.outlets + 1,
+    });
+  }
+
+  // Biggest first, but untagged always sinks — it is a data-entry gap, not a
+  // place, and it should not head the list on volume alone.
+  return [...totals.values()].sort((a, b) => {
+    if (a.name === UNTAGGED_AREA) return 1;
+    if (b.name === UNTAGGED_AREA) return -1;
+    return b.las - a.las || a.name.localeCompare(b.name, 'ar');
+  });
+}

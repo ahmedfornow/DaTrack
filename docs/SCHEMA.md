@@ -67,6 +67,7 @@ Outlets.
 | `dual_shift` | boolean | **Legacy.** Kept in sync (`shift_mode='dual'`). Migrate off it |
 | `is_ds` | boolean | Direct Sales — printed in its own message section |
 | `city` | text | |
+| `area` | text NULL | Town within the city, e.g. Buraydah. **Recorded by hand** — it cannot be parsed from the name reliably (`Al Raas` vs `Al Rass`, absent on most rows). Null groups under «غير محدد» |
 | `active` | boolean | |
 
 ### `attendance`

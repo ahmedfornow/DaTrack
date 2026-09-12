@@ -16,6 +16,8 @@ import { ReportPanel } from './ReportPanel';
 import { StockTab } from './StockTab';
 import { ChecklistTab } from './ChecklistTab';
 import { MyDaysTab } from './MyDaysTab';
+import { MonthCurve } from '../charts/MonthCurve';
+import type { MonthPoint } from '../charts/monthSeries';
 import { PendingBadge } from './PendingBadge';
 import type { BusinessDate } from '../../lib/businessDay';
 import type { Session } from '../../data/attendance';
@@ -42,6 +44,8 @@ export interface WorkScreenProps {
   readonly checklistItems: readonly ChecklistItem[];
   readonly checkedItems: ReadonlySet<number>;
   readonly monthSessions: readonly Session[];
+  /** Cumulative LAS against target for this month. Empty until the tab opens. */
+  readonly monthCurve: readonly MonthPoint[];
 
   readonly busy: boolean;
   readonly error: string | null;
@@ -80,6 +84,7 @@ export function WorkScreen(props: WorkScreenProps) {
     checklistItems,
     checkedItems,
     monthSessions,
+    monthCurve,
     busy,
     error,
     notice,
@@ -205,6 +210,16 @@ export function WorkScreen(props: WorkScreenProps) {
           busy={busy}
           onToggle={onToggleCheck}
         />
+      )}
+
+      {active === 'days' && (
+        <div className="mb-2">
+          <MonthCurve
+            points={monthCurve}
+            title="منحنى الشهر"
+            empty="لا مبيعات هذا الشهر بعد"
+          />
+        </div>
       )}
 
       {active === 'days' && (

@@ -13,6 +13,7 @@ import { businessMonth } from '../../lib/businessDay';
 import { buildPeriodSummary, type PeriodKind } from '../reports/periodSummary';
 import { buildMonthCsv, monthCsvFilename } from '../reports/monthCsv';
 import type { DashboardData } from '../../data/supervisor';
+import { MonthCurve } from '../charts/MonthCurve';
 
 export interface OverviewProps {
   readonly city: string;
@@ -125,6 +126,12 @@ export function Overview({
               {data.sales.byPromoter.reduce((n, p) => n + p.ld, 0)} · LAU {data.sales.lau}
             </p>
           </div>
+
+          <MonthCurve
+            points={data.series}
+            title="منحنى الشهر — الفريق"
+            empty="لا مبيعات هذا الشهر بعد"
+          />
 
           <div className="rounded-card border border-line bg-surface p-4">
             <h2 className="text-md font-bold text-ink">تقارير ومشاركة</h2>

@@ -4,6 +4,8 @@ import {
   aggregateSales,
   type AggregateSale,
   type ComplianceAttendance,
+  aggregateByArea,
+  UNTAGGED_AREA,
 } from './aggregate';
 
 function sale(overrides: Partial<AggregateSale> = {}): AggregateSale {
@@ -240,5 +242,77 @@ describe('aggregateCompliance', () => {
     });
     // 1.1 * 3 is 3.3000000000000003 in float arithmetic.
     expect(rows[0]?.target).toBe(3.3);
+  });
+});
+
+describe('aggregateByArea', () => {
+  const outlet = (name: string, las: number, lau = 0) => ({
+    name,
+    las,
+    lau,
+    sk: 0,
+    mgm: 0,
+    ld: 0,
+  });
+
+  it('rolls outlets up into their town', () => {
+    const rows = aggregateByArea(
+      [outlet('A', 5), outlet('B', 3), outlet('C', 2)],
+      new Map([
+        ['A', 'Buraydah'],
+        ['B', 'Buraydah'],
+        ['C', 'Unaizah'],
+      ]),
+    );
+    expect(rows.map((row) => [row.name, row.las, row.outlets])).toEqual([
+      ['Buraydah', 8, 2],
+      ['Unaizah', 2, 1],
+    ]);
+  });
+
+  it('keeps untagged outlets visible instead of dropping them', () => {
+    // Dropping them would make the area totals silently disagree with every
+    // other total on the dashboard.
+    const rows = aggregateByArea([outlet('A', 5), outlet('B', 4)], new Map([['A', 'Buraydah']]));
+    const total = rows.reduce((sum, row) => sum + row.las, 0);
+    expect(total).toBe(9);
+    expect(rows.map((row) => row.name)).toContain(UNTAGGED_AREA);
+  });
+
+  it('sinks untagged to the bottom even when it is the biggest', () => {
+    const rows = aggregateByArea(
+      [outlet('A', 1), outlet('B', 99)],
+      new Map([['A', 'Buraydah'], ['B', null]]),
+    );
+    expect(rows[rows.length - 1]?.name).toBe(UNTAGGED_AREA);
+  });
+
+  it('treats blank and whitespace-only tags as untagged', () => {
+    const rows = aggregateByArea([outlet('A', 1)], new Map([['A', '   ']]));
+    expect(rows[0]?.name).toBe(UNTAGGED_AREA);
+  });
+
+  it('trims a tag so "Buraydah " and "Buraydah" are one area', () => {
+    const rows = aggregateByArea(
+      [outlet('A', 1), outlet('B', 1)],
+      new Map([['A', 'Buraydah '], ['B', 'Buraydah']]),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.las).toBe(2);
+  });
+
+  it('carries the sale-type breakdown up with the totals', () => {
+    const rows = aggregateByArea(
+      [
+        { name: 'A', las: 2, lau: 1, sk: 2, mgm: 1, ld: 0 },
+        { name: 'B', las: 1, lau: 0, sk: 1, mgm: 0, ld: 1 },
+      ],
+      new Map([['A', 'Buraydah'], ['B', 'Buraydah']]),
+    );
+    expect(rows[0]).toMatchObject({ las: 3, lau: 1, sk: 3, mgm: 1, ld: 1 });
+  });
+
+  it('returns nothing for no outlets', () => {
+    expect(aggregateByArea([], new Map())).toEqual([]);
   });
 });

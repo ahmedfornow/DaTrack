@@ -19,7 +19,7 @@ import { ShiftMode, type Shift, type ShiftMode as ShiftModeValue } from '../doma
 import { failFrom, invalid, ok, type Result } from './errors';
 
 const OUTLET_COLUMNS =
-  'id, name, unicode, maps_url, shift_mode, dual_shift, is_ds, city, active';
+  'id, name, unicode, maps_url, shift_mode, dual_shift, is_ds, city, area, active';
 
 export interface Outlet {
   readonly id: number;
@@ -35,6 +35,12 @@ export interface Outlet {
   /** Direct Sales outlets get their own section in the route message. */
   readonly isDs: boolean;
   readonly city: string;
+  /**
+   * Town or district within the city. Recorded by hand — it cannot be parsed
+   * reliably from the name. Null until tagged; the area view groups those
+   * together rather than hiding them.
+   */
+  readonly area: string | null;
   readonly active: boolean;
   /** The shifts this outlet runs, derived from {@link shiftMode}. */
   readonly shifts: readonly Shift[];
@@ -76,6 +82,10 @@ export function parseOutlet(row: unknown): Outlet | null {
     shiftMode,
     isDs: record['is_ds'] === true,
     city: typeof city === 'string' ? city : '',
+    area:
+      typeof record['area'] === 'string' && (record['area'] as string).trim() !== ''
+        ? (record['area'] as string).trim()
+        : null,
     active: active === null || active === undefined ? true : active === true,
     shifts: shiftsFor(shiftMode),
   };
@@ -138,6 +148,8 @@ export interface OutletDraft {
   readonly mapsUrl: string;
   readonly shiftMode: ShiftModeValue;
   readonly isDs: boolean;
+  /** Free text, bounded. Empty means untagged. */
+  readonly area: string;
 }
 
 /**
@@ -167,8 +179,23 @@ export function prepareOutlet(
       mapsUrl,
       shiftMode: draft.shiftMode,
       isDs: draft.isDs,
+      // Single line and bounded, like every other outlet text field — these
+      // end up inside generated WhatsApp messages.
+      area: oneLine(draft.area ?? '', 60),
     },
   };
+}
+
+/**
+ * Attaches the area to a row about to be written.
+ *
+ * `touch_points.area` does not exist in `types/database.ts` until migration 004
+ * is applied and `npm run gen:types` re-runs, so the compiler cannot see a
+ * column that is real in the database. One cast, in one place, removed by that
+ * regeneration — the same seam `data/notes.ts` uses.
+ */
+function withArea<T extends object>(row: T, area: string): T {
+  return { ...row, area: area === '' ? null : area } as T;
 }
 
 /** Creates an outlet in the supervisor's city. */
@@ -179,7 +206,7 @@ export async function createOutlet(draft: OutletDraft, city: string): Promise<Re
 
   const { data, error } = await db
     .from('touch_points')
-    .insert({
+    .insert(withArea({
       name: values.name,
       unicode: values.unicode === '' ? null : values.unicode,
       maps_url: values.mapsUrl === '' ? null : values.mapsUrl,
@@ -189,7 +216,7 @@ export async function createOutlet(draft: OutletDraft, city: string): Promise<Re
       dual_shift: values.shiftMode === 'dual',
       is_ds: values.isDs,
       city,
-    })
+    }, values.area))
     .select(OUTLET_COLUMNS)
     .single();
 
@@ -212,14 +239,14 @@ export async function updateOutlet(id: number, draft: OutletDraft): Promise<Resu
 
   const { error } = await db
     .from('touch_points')
-    .update({
+    .update(withArea({
       name: values.name,
       unicode: values.unicode === '' ? null : values.unicode,
       maps_url: values.mapsUrl === '' ? null : values.mapsUrl,
       shift_mode: values.shiftMode,
       dual_shift: values.shiftMode === 'dual',
       is_ds: values.isDs,
-    })
+    }, values.area))
     .eq('id', id);
 
   if (error) {
@@ -235,5 +262,33 @@ export async function updateOutlet(id: number, draft: OutletDraft): Promise<Resu
 export async function setOutletActive(id: number, active: boolean): Promise<Result<true>> {
   const { error } = await db.from('touch_points').update({ active }).eq('id', id);
   if (error) return failFrom(error, { action: 'تغيير حالة الموقع' });
+  return ok(true);
+}
+
+/**
+ * Sets just the area on one outlet.
+ *
+ * Deliberately narrow. `updateOutlet` rewrites every field, which means reading
+ * them all back and writing them again to change one — and any drift between
+ * the read and the write silently overwrites something nobody meant to touch.
+ * This touches one column.
+ *
+ * Empty clears the tag rather than storing an empty string, so "untagged" has
+ * exactly one representation in the database.
+ */
+export async function setOutletArea(id: number, area: string): Promise<Result<true>> {
+  const cleaned = oneLine(area, 60);
+
+  const { error } = await db
+    .from('touch_points')
+    .update(withArea({}, cleaned) as never)
+    .eq('id', id);
+
+  if (error) {
+    return failFrom(error, {
+      action: 'تحديد المنطقة',
+      overrides: { '23514': 'اسم المنطقة طويل — 60 حرفاً كحد أقصى' },
+    });
+  }
   return ok(true);
 }

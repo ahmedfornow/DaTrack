@@ -23,9 +23,11 @@ import {
 } from '../lib/businessDay';
 import { AttendanceStatus, CustomerType, SaleType, Shift } from '../domain/values';
 import {
+  aggregateByArea,
   aggregateCompliance,
   aggregateSales,
   type AggregateSale,
+  type AreaTotals,
   type ComplianceAttendance,
   type ComplianceRow,
   type SalesAggregate,
@@ -39,6 +41,11 @@ import { oneLine } from '../domain/text';
 import { parseOutlet, type Outlet } from './outlets';
 import { loadOutletCounts, type OutletStockReport } from './stock';
 import * as outletsData from './outlets';
+import {
+  buildMonthSeries,
+  type MonthPoint,
+  type SeriesTarget,
+} from '../features/charts/monthSeries';
 import {
   buildDailyActivity,
   type ActivityAttendance,
@@ -56,6 +63,10 @@ export interface DashboardData {
   readonly guidedTrials: number;
   readonly checkIns: number;
   readonly csvRows: readonly CsvRow[];
+  /** Cumulative LAS against cumulative target, one point per day this month. */
+  readonly series: readonly MonthPoint[];
+  /** Per-town totals. Outlets with no area group under `UNTAGGED_AREA`. */
+  readonly byArea: readonly AreaTotals[];
   /**
    * Stock counted in the period, by outlet. Empty rather than absent when the
    * read fails — a stocktake nobody can see is a gap in a reference panel, not
@@ -274,6 +285,8 @@ export async function loadDashboard(
       checkIns: 0,
       csvRows: [],
       stock: [],
+      series: [],
+      byArea: [],
     });
   }
 
@@ -398,10 +411,52 @@ export async function loadDashboard(
     lasByPromoter.set(id, (lasByPromoter.get(id) ?? 0) + 1);
   }
 
+  // The month curve reuses the month-to-date rows already fetched above, so
+  // the chart costs no extra round trip.
+  const curveTargets: SeriesTarget[] = [];
+  for (const [composite, value] of dailyTargets) {
+    const [outletId, shiftText] = composite.split('-');
+    const shift = Shift.tryParse(shiftText);
+    if (shift === null) continue;
+    curveTargets.push({ touchPointId: Number(outletId), shift, dailyTarget: value });
+  }
+
+  const series = buildMonthSeries({
+    month,
+    throughDay: businessDayOfMonth(now),
+    attendance: (monthAttendanceResult.data ?? []).map((row) => {
+      const record = row as Row;
+      const outletId = record['touch_point_id'];
+      return {
+        workDate: String(record['work_date'] ?? ''),
+        status: String(record['status'] ?? ''),
+        touchPointId: typeof outletId === 'number' ? outletId : null,
+        shift: Shift.tryParse(record['shift']),
+      };
+    }),
+    sales: (monthSaleResult.data ?? []).map((row) => {
+      const record = row as Row;
+      return {
+        workDate: String(record['work_date'] ?? ''),
+        customerType: String(record['customer_type'] ?? ''),
+      };
+    }),
+    targets: curveTargets,
+  });
+
+  // Areas live on the outlet, so the roll-up needs the outlet list. One small
+  // query against a table of 18 rows, and a failure here must not take the
+  // dashboard down — the area accordion simply stays empty.
+  const outletList = await outletsData.listAll(city);
+  const areaOf = new Map<string, string | null>(
+    outletList.ok ? outletList.data.map((outlet) => [outlet.name, outlet.area]) : [],
+  );
+  const salesAggregate = aggregateSales(aggregateInput);
+
   return ok({
     start,
     period,
-    sales: aggregateSales(aggregateInput),
+    sales: salesAggregate,
     compliance: aggregateCompliance({
       promoters,
       attendance: monthAttendance,
@@ -413,6 +468,8 @@ export async function loadDashboard(
     checkIns,
     csvRows,
     stock: stockResult.ok ? stockResult.data : [],
+    series,
+    byArea: aggregateByArea(salesAggregate.byOutlet, areaOf),
   });
 }
 

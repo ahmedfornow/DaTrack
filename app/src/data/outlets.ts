@@ -255,30 +255,3 @@ export async function setOutletActive(id: number, active: boolean): Promise<Resu
   return ok(true);
 }
 
-/**
- * Sets just the area on one outlet.
- *
- * Deliberately narrow. `updateOutlet` rewrites every field, which means reading
- * them all back and writing them again to change one — and any drift between
- * the read and the write silently overwrites something nobody meant to touch.
- * This touches one column.
- *
- * Empty clears the tag rather than storing an empty string, so "untagged" has
- * exactly one representation in the database.
- */
-export async function setOutletArea(id: number, area: string): Promise<Result<true>> {
-  const cleaned = oneLine(area, 60);
-
-  const { error } = await db
-    .from('touch_points')
-    .update({ area: cleaned === '' ? null : cleaned })
-    .eq('id', id);
-
-  if (error) {
-    return failFrom(error, {
-      action: 'تحديد المنطقة',
-      overrides: { '23514': 'اسم المنطقة طويل — 60 حرفاً كحد أقصى' },
-    });
-  }
-  return ok(true);
-}

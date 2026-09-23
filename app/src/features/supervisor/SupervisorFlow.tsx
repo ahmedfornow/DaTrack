@@ -532,11 +532,11 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
             onSaveTargets={(entries) =>
               void runAdmin(() => targetsData.saveTargets(entries), 'حُفظت الأهداف')
             }
-            onSaveOutletArea={(id, area) =>
-              void runAdmin(
-                () => outletsData.setOutletArea(id, area),
-                area.trim() === '' ? 'أُزيلت المنطقة' : 'حُددت المنطقة',
-              )
+            onCreateOutlet={(draft) =>
+              void runAdmin(() => outletsData.createOutlet(draft, city), 'أُضيف الموقع')
+            }
+            onSaveOutlet={(id, draft) =>
+              void runAdmin(() => outletsData.updateOutlet(id, draft), 'حُفظ الموقع')
             }
             onToggleOutlet={(id, active) =>
               void runAdmin(

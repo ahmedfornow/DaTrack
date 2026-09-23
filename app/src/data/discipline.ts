@@ -135,33 +135,6 @@ export function noteFor(record: NewRecord): string | null {
 // Queries
 // ---------------------------------------------------------------------------
 
-/** What a PostgREST call resolves to, narrowed to what this file reads. */
-interface QueryResult {
-  data: unknown;
-  error: { code?: string | null; message?: string | null } | null;
-}
-
-/**
- * The builder, untyped against the table.
- *
- * `discipline` is absent from `types/database.ts` until migration 003 is
- * applied and `npm run gen:types` re-runs. One seam here rather than `as never`
- * at every call site; every row still goes through {@link parseRecord}, which
- * is where the checking actually happens.
- */
-interface RecordQuery extends PromiseLike<QueryResult> {
-  select(columns: string): RecordQuery;
-  insert(row: Record<string, unknown>): RecordQuery;
-  delete(): RecordQuery;
-  eq(column: string, value: unknown): RecordQuery;
-  order(column: string, options: { ascending: boolean }): RecordQuery;
-  limit(count: number): RecordQuery;
-  single(): PromiseLike<QueryResult>;
-}
-
-const table = (): RecordQuery =>
-  (db as unknown as { from(name: string): RecordQuery }).from('discipline');
-
 const parseList = (data: unknown): DisciplineRecord[] =>
   (Array.isArray(data) ? data : [])
     .map(parseRecord)
@@ -175,7 +148,8 @@ const parseList = (data: unknown): DisciplineRecord[] =>
  * manager's city switcher would make the list quietly incomplete.
  */
 export async function listRecent(limit = 50): Promise<Result<DisciplineRecord[]>> {
-  const { data, error } = await table()
+  const { data, error } = await db
+    .from('discipline')
     .select(RECORD_COLUMNS)
     .order('work_date', { ascending: false })
     .order('id', { ascending: false })
@@ -189,7 +163,8 @@ export async function listRecent(limit = 50): Promise<Result<DisciplineRecord[]>
 export async function listForPromoter(
   promoterId: string,
 ): Promise<Result<DisciplineRecord[]>> {
-  const { data, error } = await table()
+  const { data, error } = await db
+    .from('discipline')
     .select(RECORD_COLUMNS)
     .eq('promoter_id', promoterId)
     .order('work_date', { ascending: false })
@@ -206,7 +181,8 @@ export async function createRecord(
   const problem = validateRecord(record);
   if (problem !== null) return invalid(problem);
 
-  const { data, error } = await table()
+  const { data, error } = await db
+    .from('discipline')
     .insert({
       promoter_id: record.promoterId,
       work_date: record.workDate,
@@ -237,7 +213,7 @@ export async function createRecord(
 
 /** Removes a record. Either the supervisor or the manager may undo one. */
 export async function removeRecord(recordId: number): Promise<Result<true>> {
-  const { error } = await table().delete().eq('id', recordId);
+  const { error } = await db.from('discipline').delete().eq('id', recordId);
   if (error) return failFrom(error, { action: 'حذف المخالفة' });
   return ok(true);
 }

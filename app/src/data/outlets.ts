@@ -186,18 +186,6 @@ export function prepareOutlet(
   };
 }
 
-/**
- * Attaches the area to a row about to be written.
- *
- * `touch_points.area` does not exist in `types/database.ts` until migration 004
- * is applied and `npm run gen:types` re-runs, so the compiler cannot see a
- * column that is real in the database. One cast, in one place, removed by that
- * regeneration — the same seam `data/notes.ts` uses.
- */
-function withArea<T extends object>(row: T, area: string): T {
-  return { ...row, area: area === '' ? null : area } as T;
-}
-
 /** Creates an outlet in the supervisor's city. */
 export async function createOutlet(draft: OutletDraft, city: string): Promise<Result<Outlet>> {
   const prepared = prepareOutlet(draft);
@@ -206,8 +194,9 @@ export async function createOutlet(draft: OutletDraft, city: string): Promise<Re
 
   const { data, error } = await db
     .from('touch_points')
-    .insert(withArea({
+    .insert({
       name: values.name,
+      area: values.area === '' ? null : values.area,
       unicode: values.unicode === '' ? null : values.unicode,
       maps_url: values.mapsUrl === '' ? null : values.mapsUrl,
       shift_mode: values.shiftMode,
@@ -216,7 +205,7 @@ export async function createOutlet(draft: OutletDraft, city: string): Promise<Re
       dual_shift: values.shiftMode === 'dual',
       is_ds: values.isDs,
       city,
-    }, values.area))
+    })
     .select(OUTLET_COLUMNS)
     .single();
 
@@ -239,14 +228,15 @@ export async function updateOutlet(id: number, draft: OutletDraft): Promise<Resu
 
   const { error } = await db
     .from('touch_points')
-    .update(withArea({
+    .update({
       name: values.name,
+      area: values.area === '' ? null : values.area,
       unicode: values.unicode === '' ? null : values.unicode,
       maps_url: values.mapsUrl === '' ? null : values.mapsUrl,
       shift_mode: values.shiftMode,
       dual_shift: values.shiftMode === 'dual',
       is_ds: values.isDs,
-    }, values.area))
+    })
     .eq('id', id);
 
   if (error) {
@@ -281,7 +271,7 @@ export async function setOutletArea(id: number, area: string): Promise<Result<tr
 
   const { error } = await db
     .from('touch_points')
-    .update(withArea({}, cleaned) as never)
+    .update({ area: cleaned === '' ? null : cleaned })
     .eq('id', id);
 
   if (error) {

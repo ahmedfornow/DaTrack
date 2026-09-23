@@ -108,37 +108,6 @@ export function validateNote(body: string): string | null {
 // Queries — every one filters on owner_id explicitly
 // ---------------------------------------------------------------------------
 
-/** What a PostgREST call resolves to, narrowed to what this file reads. */
-interface NoteResult {
-  data: unknown;
-  error: { code?: string | null; message?: string | null } | null;
-}
-
-/**
- * The slice of the query builder used below, without table typing.
- *
- * `notes` does not exist in `types/database.ts` until migration 002 is applied
- * and `npm run gen:types` re-runs, so the compiler cannot see a table that is
- * real in the database. Confining that to one helper means removing it later
- * is a one-line change rather than unpicking `as never` from five call sites.
- *
- * Nothing is lost by it: the compiler never validated these rows anyway. Every
- * row that comes back goes through {@link parseNote}, which rejects anything
- * whose shape is wrong — that is where the safety actually lives.
- */
-interface NoteQuery extends PromiseLike<NoteResult> {
-  select(columns: string): NoteQuery;
-  insert(row: Record<string, unknown>): NoteQuery;
-  update(row: Record<string, unknown>): NoteQuery;
-  delete(): NoteQuery;
-  eq(column: string, value: unknown): NoteQuery;
-  order(column: string, options: { ascending: boolean }): NoteQuery;
-  single(): PromiseLike<NoteResult>;
-}
-
-const notes = (): NoteQuery =>
-  (db as unknown as { from(table: string): NoteQuery }).from('notes');
-
 /**
  * One person's notes, most recently changed first.
  *
@@ -147,24 +116,22 @@ const notes = (): NoteQuery =>
  * list looks like someone who has not written anything rather than a fault.
  */
 export async function listNotes(ownerId: string): Promise<Result<Note[]>> {
-  const { data, error } = await notes()
+  const { data, error } = await db
+    .from('notes')
     .select(NOTE_COLUMNS)
     .eq('owner_id', ownerId)
     .order('updated_at', { ascending: false });
 
   if (error) return failFrom(error, { action: 'قراءة الملاحظات' });
-  // `data` is `unknown` by construction — see the note on NoteQuery. Anything
-  // that is not an array of parseable rows becomes an empty list rather than a
-  // crash, which is the same posture every other parser here takes.
-  const rows = Array.isArray(data) ? data : [];
-  return ok(rows.map(parseNote).filter((note): note is Note => note !== null));
+  return ok((data ?? []).map(parseNote).filter((note): note is Note => note !== null));
 }
 
 export async function createNote(ownerId: string, body: string): Promise<Result<Note>> {
   const problem = validateNote(body);
   if (problem !== null) return invalid(problem);
 
-  const { data, error } = await notes()
+  const { data, error } = await db
+    .from('notes')
     .insert({ owner_id: ownerId, body: cleanNoteBody(body) })
     .select(NOTE_COLUMNS)
     .single();
@@ -186,7 +153,8 @@ export async function updateNote(
   const problem = validateNote(body);
   if (problem !== null) return invalid(problem);
 
-  const { data, error } = await notes()
+  const { data, error } = await db
+    .from('notes')
     .update({ body: cleanNoteBody(body) })
     .eq('id', noteId)
     .eq('owner_id', ownerId)
@@ -202,7 +170,8 @@ export async function updateNote(
 }
 
 export async function removeNote(noteId: number, ownerId: string): Promise<Result<true>> {
-  const { error } = await notes()
+  const { error } = await db
+    .from('notes')
     .delete()
     .eq('id', noteId)
     .eq('owner_id', ownerId);

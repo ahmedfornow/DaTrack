@@ -62,7 +62,8 @@ Re-running a file is safe. Each one guards its own statements with
 | 001 | [`001_client_op_id.sql`](001_client_op_id.sql) | `client_op_id` on `attendance` and `sell_operations`, plus partial unique indexes, so a retried offline write cannot duplicate | **2026-08-29** |
 | 002 | [`002_notes.sql`](002_notes.sql) | `notes` — free-text notes private to their owner, with RLS and an `updated_at` trigger | **2026-09-12** |
 | 003 | [`003_discipline_and_shared_tasks.sql`](003_discipline_and_shared_tasks.sql) | `discipline` (warnings and pay deductions, staff-only), and `sup_tasks` widened to a shared list | **2026-09-12** |
-| 004 | [`004_outlet_area.sql`](004_outlet_area.sql) | `touch_points.area` — the town an outlet sits in, so sales can be grouped by area | not yet |
+| 004 | [`004_outlet_area.sql`](004_outlet_area.sql) | `touch_points.area` — the town an outlet sits in, so sales can be grouped by area | **2026-09-17** (confirmed present) |
+| 005 | [`005_close_public_reads.sql`](005_close_public_reads.sql) | Closes anonymous reads on `route_plans`, `targets`, `touch_points`; route plans become own-rows-or-staff | not yet |
 
 Migration 001 is verified: both columns exist, both length checks hold, and both partial
 unique indexes on `(promoter_id, client_op_id)` are present. The whole file runs inside one

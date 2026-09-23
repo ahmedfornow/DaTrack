@@ -122,6 +122,19 @@ authenticated user there. Test in the browser console instead:
 (await db.rpc('my_role')).data
 ```
 
+### 6b. `to public` publishes the table to the internet
+`public` is every Postgres role — including `anon`, which is what a request carries
+before anyone logs in. The anon key is the publishable key, and it is inside the app's
+JavaScript. So `create policy ... for select to public using (true)` is not "everyone on
+the team can read this"; it is "anyone who opens the page can read this".
+
+Three tables shipped that way for months — `route_plans` among them, which carries each
+employee's sick, absent and annual-leave days. Nothing failed, because every legitimate
+user could read the rows too. Fixed in migration 005.
+
+Read policies take `to authenticated`. To check a table from outside, query it with only
+the publishable key: anything other than `[]` for a private table is a leak.
+
 ### 7. Never interpolate raw values into HTML attributes
 `onclick="fn(${JSON.stringify(id)})"` emits `onclick="fn("abc")"` — the attribute
 terminates early and every button in that list dies silently. Use proper event listeners.

@@ -270,6 +270,20 @@ unexplained `other`.
 | `supervisor` | Everything in their own `city`. Can delete sales and attendance |
 | `manager` | Read-only across all cities for operational data. **Writes** to `discipline` and the shared `sup_tasks` — see those tables |
 
+**`to public` is not "logged-in users".** `public` is every role, including `anon` — the
+role a request carries before login, made with the publishable key that ships inside the
+app. A read policy `for select to public using (true)` publishes the whole table to the
+internet. Until migration 005, `route_plans`, `targets` and `touch_points` were exactly
+that, exposing every employee's sick and absence days. Read policies take
+`to authenticated`.
+
+`route_plans` reads are own rows or staff:
+```sql
+using (promoter_id = auth.uid() or my_role() in ('supervisor', 'manager'))
+```
+It must not rely on the city-scoped write policy for reads: that one filters on
+`touch_point_id IN (...)`, which is NULL for leave rows and would hide them.
+
 Policies are **permissive** (OR-ed). A restrictive policy would AND with the others — if
 one is ever added, it can veto rows the others allow, which is hard to diagnose.
 

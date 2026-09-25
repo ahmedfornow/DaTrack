@@ -10,6 +10,7 @@
 
 import { shortNameOf } from '../../domain/devices';
 import { groupSales, summarize, type Sale } from '../../data/sales';
+import { Swatch } from './Swatch';
 
 export interface SessionListProps {
   readonly sales: readonly Sale[];
@@ -29,36 +30,39 @@ export function SessionList({ sales, onRemoveOne, busy }: SessionListProps) {
   const groups = groupSales(sales);
   const totals = summarize(sales);
 
+  // Quieter than the tiles above on purpose: this list is for checking, and the
+  // tiles are for acting. Rows are separated by rules rather than boxed.
   return (
     <section>
-      <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-xs tracking-wide text-muted">عمليات الجلسة</h2>
-        <p className="tabular text-xs text-muted" dir="ltr">
+      <div className="mb-1 flex items-baseline justify-between gap-3">
+        <h2 className="text-md font-bold text-ink">مبيعات الجلسة</h2>
+        <p className="tabular text-xs text-faint" dir="ltr">
           SK {totals.sk} · MGM {totals.mgm} · LD {totals.ld} · LAU {totals.lau}
         </p>
       </div>
 
-      <ul className="space-y-2">
+      <ul>
         {groups.map((group) => {
           const last = group.ids[group.ids.length - 1];
           return (
             <li
               key={group.key}
-              className="flex items-center justify-between gap-3 rounded-control border border-line-soft bg-surface-raised px-3 py-2.5"
+              className="flex items-center gap-3 border-b border-line-soft py-2"
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm text-ink">
+              <Swatch color={group.color} className="h-4.5 w-4.5" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-right text-sm text-ink" dir="ltr">
                   <span className="font-bold">{shortNameOf(group.deviceType)}</span>
                   <span className="mx-1 text-faint">—</span>
-                  <span dir="ltr">{group.color}</span>
+                  {group.color}
                 </p>
-                <p className="mt-0.5 text-xs text-muted" dir="ltr">
+                <p className="text-right text-xs text-faint" dir="ltr">
                   {group.saleType} · {group.customerType}
                 </p>
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                <span className="tabular flex h-7 min-w-7 items-center justify-center rounded-lg bg-gold/12 px-2 text-sm font-bold text-gold">
+                <span className="tabular min-w-6 text-center text-md font-bold text-gold">
                   {group.count}
                 </span>
                 <button
@@ -68,7 +72,7 @@ export function SessionList({ sales, onRemoveOne, busy }: SessionListProps) {
                     if (last !== undefined) onRemoveOne(last);
                   }}
                   aria-label={`حذف عملية واحدة من ${shortNameOf(group.deviceType)} ${group.color}`}
-                  className="min-h-tap w-11 rounded-control border border-line-soft text-behind disabled:opacity-40"
+                  className="min-h-tap w-11 rounded-control border border-line text-sm text-muted disabled:opacity-40"
                 >
                   {/* LTR and Latin digits, matching the count pill beside it.
                       Written as `−١` inside the RTL row it rendered as `١−`,

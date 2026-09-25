@@ -28,6 +28,7 @@ import { saleTypeAfterCustomerChange } from '../../domain/rules';
 import { CustomerType, SaleType } from '../../domain/values';
 import type { Combination, NewSale } from '../../data/sales';
 import { validateSale } from '../../data/sales';
+import { Swatch } from './Swatch';
 
 export interface SaleEntryProps {
   readonly shortcuts: readonly Combination[];
@@ -79,8 +80,11 @@ export function SaleEntry({ shortcuts, busy, onLog }: SaleEntryProps) {
     <section className="space-y-3">
       {shortcuts.length > 0 && (
         <div>
-          <h2 className="mb-2 text-xs tracking-wide text-muted">الأكثر تسجيلاً — اضغط للتسجيل</h2>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <h2 className="text-md font-bold text-ink">سجّل بيعة</h2>
+            <span className="text-xs text-faint">الأكثر استخداماً عندك</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
             {shortcuts.map((combo) => (
               <button
                 key={`${combo.deviceType}|${combo.color}|${combo.saleType}|${combo.customerType}`}
@@ -94,16 +98,19 @@ export function SaleEntry({ shortcuts, busy, onLog }: SaleEntryProps) {
                     customerType: combo.customerType,
                   })
                 }
-                className="min-h-tap rounded-control border border-line bg-surface-raised px-3 py-2 text-right transition-colors active:bg-gold/10 disabled:opacity-50"
+                aria-label={`تسجيل ${shortNameOf(combo.deviceType)} ${combo.color} ${combo.saleType} ${combo.customerType}`}
+                className="min-h-24 rounded-card border border-line bg-gradient-to-b from-surface-raised to-surface p-3 text-right transition active:scale-[0.97] active:border-gold disabled:opacity-50"
               >
-                <span className="block text-sm font-bold text-ink">
+                <Swatch color={combo.color} className="mb-2 h-6 w-6" />
+                <span className="block text-md font-bold leading-tight text-ink">
                   {shortNameOf(combo.deviceType)}
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-muted" dir="ltr">
+                <span className="block truncate text-right text-xs text-muted" dir="ltr">
                   {combo.color}
                 </span>
-                <span className="mt-1 block text-xs text-gold" dir="ltr">
-                  {combo.saleType} · {combo.customerType}
+                <span className="mt-2 flex flex-wrap justify-end gap-1" dir="ltr">
+                  <Tag>{combo.saleType}</Tag>
+                  <Tag quiet={combo.customerType !== 'LAS'}>{combo.customerType}</Tag>
                 </span>
               </button>
             ))}
@@ -114,10 +121,14 @@ export function SaleEntry({ shortcuts, busy, onLog }: SaleEntryProps) {
       <button
         type="button"
         onClick={() => setExpanded((open) => !open)}
-        className="min-h-tap w-full rounded-control border border-dashed border-line text-sm text-gold"
+        className={`min-h-13 w-full rounded-card text-md font-bold ${
+          expanded
+            ? 'border border-line text-muted'
+            : 'bg-gradient-to-br from-gold-hi via-gold to-gold-lo text-on-gold'
+        }`}
         aria-expanded={expanded}
       >
-        {expanded ? 'إخفاء' : shortcuts.length > 0 ? 'تسجيل عملية مختلفة' : 'تسجيل بيع'}
+        {expanded ? 'إخفاء' : shortcuts.length > 0 ? '+ بيعة مختلفة' : '+ تسجيل بيعة'}
       </button>
 
       {expanded && (
@@ -224,6 +235,19 @@ export function SaleEntry({ shortcuts, busy, onLog }: SaleEntryProps) {
         </div>
       )}
     </section>
+  );
+}
+
+/** LAS is what the target counts, so it carries the gold; LAU stays quiet. */
+function Tag({ quiet = false, children }: { quiet?: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      className={`rounded-md px-1.5 py-1 font-mono text-xs leading-none ${
+        quiet ? 'bg-absent/15 text-muted' : 'bg-gold/12 text-gold'
+      }`}
+    >
+      {children}
+    </span>
   );
 }
 

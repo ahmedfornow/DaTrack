@@ -21,6 +21,7 @@ import { OutletsSection } from './OutletsSection';
 import type { TeamMember } from '../../data/supervisor';
 import { buildTeamLogins } from '../reports/teamLogins';
 import { targetKey, type TargetTable } from '../../data/targets';
+import { targetEntries, targetFields, type TargetEdits } from './targetDraft';
 
 export interface AdminPanelProps {
   readonly city: string;
@@ -100,49 +101,19 @@ function TargetsSection({
   busy: boolean;
   onSave: AdminPanelProps['onSaveTargets'];
 }) {
-  const [draft, setDraft] = useState<Record<string, { sales: string; gt: string }>>(() => {
-    const initial: Record<string, { sales: string; gt: string }> = {};
-    for (const outlet of outlets) {
-      for (const shift of shiftsFor(outlet.shiftMode)) {
-        const key = targetKey(outlet.id, shift);
-        const existing = targets.get(key);
-        initial[key] = {
-          sales: existing !== undefined ? String(existing.dailyTarget) : '',
-          gt: existing !== undefined ? String(existing.gtTarget) : '',
-        };
-      }
-    }
-    return initial;
-  });
+  // Only what has been typed. Saved values are read from `targets` on every
+  // render — see targetDraft.ts for why copying them in once went wrong.
+  const [edits, setEdits] = useState<TargetEdits>({});
 
   const setValue = (key: string, field: 'sales' | 'gt', value: string) => {
     const cleaned = value.replace(/[^\d.]/gu, '');
-    setDraft((current) => ({
+    setEdits((current) => ({
       ...current,
-      [key]: { ...(current[key] ?? { sales: '', gt: '' }), [field]: cleaned },
+      [key]: { ...current[key], [field]: cleaned },
     }));
   };
 
-  const save = () => {
-    const entries: { touchPointId: number; shift: Shift; dailyTarget: number; gtTarget: number }[] = [];
-    for (const outlet of outlets) {
-      for (const shift of shiftsFor(outlet.shiftMode)) {
-        const key = targetKey(outlet.id, shift);
-        const value = draft[key];
-        if (value === undefined || value.sales.trim() === '') continue;
-        const dailyTarget = Number(value.sales);
-        if (!Number.isFinite(dailyTarget)) continue;
-        const gt = Number(value.gt);
-        entries.push({
-          touchPointId: outlet.id,
-          shift,
-          dailyTarget,
-          gtTarget: Number.isFinite(gt) ? gt : 0,
-        });
-      }
-    }
-    onSave(entries);
-  };
+  const save = () => onSave(targetEntries(outlets, targets, edits));
 
   if (outlets.length === 0) return <Empty>لا مواقع</Empty>;
 
@@ -159,7 +130,7 @@ function TargetsSection({
       {outlets.flatMap((outlet) =>
         shiftsFor(outlet.shiftMode).map((shift) => {
           const key = targetKey(outlet.id, shift);
-          const value = draft[key] ?? { sales: '', gt: '' };
+          const value = targetFields(key, targets, edits);
           return (
             <div
               key={key}
@@ -286,8 +257,15 @@ function UsersSection({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setEditing(editing === member.id ? null : member.id)}
-                  onFocus={() => startEdit(member)}
+                  // Opens and fills from the click alone. Filling used to hang
+                  // off onFocus, which fights the click on every platform:
+                  // Chrome focuses a button on press, so the first tap opened
+                  // the form and the click closed it again; Safari on iPhone
+                  // never focuses a tapped button, so the form opened empty.
+                  onClick={() => {
+                    if (editing === member.id) setEditing(null);
+                    else startEdit(member);
+                  }}
                   className="min-h-tap rounded-control border border-gold px-3 text-xs text-gold disabled:opacity-40"
                 >
                   تعديل

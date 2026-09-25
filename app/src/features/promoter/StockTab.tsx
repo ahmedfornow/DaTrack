@@ -15,6 +15,7 @@ import type { BusinessDate } from '../../lib/businessDay';
 import type { StockItem } from '../../data/stock';
 import { buildStockMessage, countedSummary } from '../reports/stockCount';
 import { stockItemLabel } from '../../domain/labels';
+import { quantitiesOf, stockDraft } from './stockDraft';
 
 export interface StockTabProps {
   readonly catalog: readonly StockItem[];
@@ -40,30 +41,20 @@ export function StockTab({
   busy,
   onSave,
 }: StockTabProps) {
-  // Seeded from what is stored, so the form starts as a true picture.
-  const [draft, setDraft] = useState<ReadonlyMap<number, string>>(
-    () => new Map([...saved].map(([id, quantity]) => [id, String(quantity)])),
-  );
+  // Only what has been typed. Saved counts are laid underneath on every
+  // render — see stockDraft.ts for why copying them in once went wrong.
+  const [edits, setEdits] = useState<ReadonlyMap<number, string>>(new Map());
   const [message, setMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const quantities = new Map<number, number>();
-  for (const [id, raw] of draft) {
-    if (raw.trim() === '') continue;
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed >= 0) quantities.set(id, parsed);
-  }
+  const draft = stockDraft(saved, edits);
+  const quantities = quantitiesOf(draft);
 
   const progress = countedSummary(catalog, quantities);
 
   const setValue = (id: number, raw: string) => {
     const cleaned = raw.replace(/\D/gu, '');
-    setDraft((current) => {
-      const next = new Map(current);
-      if (cleaned === '') next.delete(id);
-      else next.set(id, cleaned);
-      return next;
-    });
+    setEdits((current) => new Map(current).set(id, cleaned));
   };
 
   const generate = () => {

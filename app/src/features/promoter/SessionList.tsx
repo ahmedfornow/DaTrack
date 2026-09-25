@@ -70,7 +70,10 @@ export function SessionList({ sales, onRemoveOne, busy }: SessionListProps) {
                   aria-label={`حذف عملية واحدة من ${shortNameOf(group.deviceType)} ${group.color}`}
                   className="min-h-tap w-11 rounded-control border border-line-soft text-behind disabled:opacity-40"
                 >
-                  −١
+                  {/* LTR and Latin digits, matching the count pill beside it.
+                      Written as `−١` inside the RTL row it rendered as `١−`,
+                      which reads as a garbled symbol rather than "remove one". */}
+                  <span dir="ltr">−1</span>
                 </button>
               </div>
             </li>

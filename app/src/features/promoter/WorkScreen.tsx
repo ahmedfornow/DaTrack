@@ -9,6 +9,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { shortOutletName } from '../../domain/text';
 import { SessionRibbon } from './SessionRibbon';
 import { SaleEntry } from './SaleEntry';
 import { SessionList } from './SessionList';
@@ -120,7 +121,7 @@ export function WorkScreen(props: WorkScreenProps) {
   return (
     <main className="mx-auto w-full max-w-app px-4 pb-10 pt-3">
       <SessionRibbon
-        outletName={session.outlet?.name ?? 'موقعك'}
+        outletName={session.outlet ? shortOutletName(session.outlet.name) : 'موقعك'}
         shift={session.workingShift}
         workDate={session.workDate}
         isToday={isToday}

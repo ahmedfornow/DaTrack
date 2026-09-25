@@ -8,7 +8,7 @@
  * to log at all and lands on the days list.
  */
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { shortOutletName } from '../../domain/text';
 import { SessionRibbon } from './SessionRibbon';
 import { SaleEntry } from './SaleEntry';
@@ -117,9 +117,24 @@ export function WorkScreen(props: WorkScreenProps) {
   ];
   const visible = tabs.filter((entry) => entry.visible);
   const active = visible.some((entry) => entry.id === tab) ? tab : 'days';
+  const hasNav = visible.length > 1;
+
+  // Every sale confirms itself. A tap that gives nothing back gets tapped
+  // again, and the second tap is a duplicate sale. The count in the ribbon
+  // moves too, but it sits at the top of the screen, away from the thumb.
+  const [confirmed, setConfirmed] = useState(false);
+  const confirmTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(confirmTimer.current), []);
+
+  const logSale: typeof onLogSale = (draft) => {
+    onLogSale(draft);
+    setConfirmed(true);
+    window.clearTimeout(confirmTimer.current);
+    confirmTimer.current = window.setTimeout(() => setConfirmed(false), 1400);
+  };
 
   return (
-    <main className="mx-auto w-full max-w-app px-4 pb-10 pt-3">
+    <main className={`mx-auto w-full max-w-app px-4 pt-3 ${hasNav ? 'pb-28' : 'pb-10'}`}>
       <SessionRibbon
         outletName={session.outlet ? shortOutletName(session.outlet.name) : 'موقعك'}
         shift={session.workingShift}
@@ -134,27 +149,6 @@ export function WorkScreen(props: WorkScreenProps) {
         <p className="mb-3 rounded-control border border-achieved/25 bg-achieved/8 px-3 py-2 text-center text-sm text-achieved">
           يومك مسجل — لا مهام مطلوبة اليوم
         </p>
-      )}
-
-      {visible.length > 1 && (
-        <div role="tablist" className="mb-3 flex gap-1.5">
-          {visible.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              role="tab"
-              aria-selected={active === entry.id}
-              onClick={() => onTabChange(entry.id)}
-              className={`min-h-tap flex-1 rounded-control border text-sm transition-colors ${
-                active === entry.id
-                  ? 'border-gold bg-gold/10 font-bold text-gold'
-                  : 'border-line-soft bg-surface text-muted'
-              }`}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
       )}
 
       <PendingBadge
@@ -173,7 +167,7 @@ export function WorkScreen(props: WorkScreenProps) {
 
       {active === 'sales' && (
         <>
-          <SaleEntry shortcuts={shortcuts} busy={busy} onLog={onLogSale} />
+          <SaleEntry shortcuts={shortcuts} busy={busy} onLog={logSale} />
           <div className="mt-5">
             <SessionList sales={sales} onRemoveOne={onRemoveSale} busy={busy} />
           </div>
@@ -243,6 +237,48 @@ export function WorkScreen(props: WorkScreenProps) {
           تسجيل خروج
         </button>
       </footer>
+
+      <p
+        role="status"
+        aria-live="polite"
+        className={`pointer-events-none fixed inset-x-0 z-40 mx-auto w-max rounded-full bg-achieved px-4 py-2.5 text-sm font-bold text-bg shadow-lg transition duration-200 ${
+          hasNav ? 'bottom-[calc(5.5rem_+_env(safe-area-inset-bottom))]' : 'bottom-[calc(1.5rem_+_env(safe-area-inset-bottom))]'
+        } ${confirmed ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}
+      >
+        {confirmed ? 'تم تسجيل البيعة ✓' : ''}
+      </p>
+
+      {/*
+        At the bottom, where the thumb is. Held in one hand with a customer
+        waiting, the top of the screen is the one place a promoter cannot reach.
+      */}
+      {hasNav && (
+        <nav
+          aria-label="أقسام اليوم"
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface-sunken/92 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+        >
+          <div role="tablist" className={`mx-auto grid max-w-app ${NAV_COLUMNS[visible.length] ?? 'grid-cols-4'}`}>
+            {visible.map((entry) => {
+              const selected = active === entry.id;
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => onTabChange(entry.id)}
+                  className={`flex min-h-16 flex-col items-center justify-center gap-1 text-xs transition-colors ${
+                    selected ? 'font-bold text-gold' : 'text-faint'
+                  }`}
+                >
+                  <TabIcon tab={entry.id} />
+                  {entry.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </main>
   );
 }
@@ -269,5 +305,55 @@ function Banner({
         </button>
       )}
     </div>
+  );
+}
+
+const NAV_COLUMNS: Record<number, string> = {
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+};
+
+function TabIcon({ tab }: { tab: PromoterTab }) {
+  const paths: Record<PromoterTab, ReactNode> = {
+    sales: (
+      <>
+        <path d="M6 7h12l-1 12H7L6 7z" />
+        <path d="M9 7a3 3 0 0 1 6 0" />
+      </>
+    ),
+    stock: (
+      <>
+        <path d="M3 8l9-5 9 5-9 5-9-5z" />
+        <path d="M3 8v8l9 5 9-5V8" />
+        <path d="M12 13v8" />
+      </>
+    ),
+    check: (
+      <>
+        <rect x="4" y="4" width="16" height="16" rx="3" />
+        <path d="M8.5 12.5l2.5 2.5 5-6" />
+      </>
+    ),
+    days: (
+      <>
+        <rect x="4" y="5" width="16" height="15" rx="3" />
+        <path d="M4 10h16M9 3v4M15 3v4" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5.5 w-5.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[tab]}
+    </svg>
   );
 }

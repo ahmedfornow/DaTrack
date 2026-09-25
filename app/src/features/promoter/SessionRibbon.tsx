@@ -10,11 +10,17 @@
  * It shifts tone between day and night shift so the mode is legible at a
  * glance, and takes on a distinctly different treatment when the session is not
  * today — that difference is the whole point.
+ *
+ * Progress is a ring that fills toward the target and says how many are left.
+ * It never turns red. The target covers the whole shift, so 3 of 6 at 7pm on a
+ * night shift is on track — the bar this replaced compared it to the full day
+ * and painted it red, which told every promoter they were failing for most of
+ * every shift. The ring turns green once the target is met.
  */
 
 import { formatReportDate, type BusinessDate } from '../../lib/businessDay';
 import { SHIFT_LABEL_WITH_ICON } from '../../domain/labels';
-import { achievementBand, achievementPercent } from '../../domain/rules';
+import { achievementBand } from '../../domain/rules';
 import type { Shift } from '../../domain/values';
 
 export interface SessionRibbonProps {
@@ -29,19 +35,8 @@ export interface SessionRibbonProps {
   readonly onReturnToToday?: (() => void) | undefined;
 }
 
-const BAND_BAR: Record<ReturnType<typeof achievementBand>, string> = {
-  achieved: 'bg-achieved',
-  close: 'bg-close',
-  behind: 'bg-behind',
-  untargeted: 'bg-absent',
-};
-
-const BAND_TEXT: Record<ReturnType<typeof achievementBand>, string> = {
-  achieved: 'text-achieved',
-  close: 'text-close',
-  behind: 'text-behind',
-  untargeted: 'text-muted',
-};
+const RADIUS = 26;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export function SessionRibbon({
   outletName,
@@ -53,7 +48,11 @@ export function SessionRibbon({
   onReturnToToday,
 }: SessionRibbonProps) {
   const band = achievementBand(lasCount, dailyTarget);
-  const percent = achievementPercent(lasCount, dailyTarget);
+  const targeted = band !== 'untargeted' && dailyTarget !== null;
+  const achieved = band === 'achieved';
+  const filled = targeted ? Math.min(1, lasCount / dailyTarget) : 0;
+  // Whole sales still needed. A target of 4.5 with 3 logged needs 2 more, not 1.5.
+  const left = targeted ? Math.max(0, Math.ceil(dailyTarget - lasCount)) : 0;
 
   // Night shift gets a cooler cast, day a warmer one. Backfill overrides both:
   // a past day must never be mistaken for the live one.
@@ -63,48 +62,91 @@ export function SessionRibbon({
       ? 'from-digital-violet/25 to-surface border-line'
       : 'from-gold/12 to-surface border-line';
 
+  const shiftChip =
+    shift === 'night'
+      ? 'border-digital-violet bg-digital-violet/30 text-ink'
+      : 'border-line-soft bg-surface-raised text-muted';
+
   return (
     <div
-      className={`sticky top-0 z-20 -mx-4 mb-3 border-b bg-gradient-to-b px-4 py-3 backdrop-blur ${tone}`}
+      className={`sticky top-0 z-20 -mx-4 mb-4 border-b bg-gradient-to-b px-4 py-3 backdrop-blur ${tone}`}
       // Announced on change so a screen reader user hears which day they are on.
       aria-live="polite"
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-md font-bold text-ink">{outletName}</p>
-          <p className="mt-0.5 text-xs text-muted">
-            {shift !== null ? SHIFT_LABEL_WITH_ICON[shift] : 'بدون فترة'}
-            <span className="mx-1.5 text-faint">·</span>
-            <span className="tabular" dir="ltr">
+      <div className="flex items-center gap-3.5">
+        <div
+          className="relative h-16 w-16 shrink-0"
+          role="img"
+          aria-label={
+            targeted ? `LAS ${lasCount} من ${dailyTarget}` : `LAS ${lasCount}`
+          }
+        >
+          <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90" aria-hidden="true">
+            <circle
+              cx="32"
+              cy="32"
+              r={RADIUS}
+              fill="none"
+              strokeWidth="6"
+              className="stroke-white/8"
+            />
+            {targeted && (
+              <circle
+                cx="32"
+                cy="32"
+                r={RADIUS}
+                fill="none"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={CIRCUMFERENCE}
+                strokeDashoffset={CIRCUMFERENCE * (1 - filled)}
+                className={`transition-[stroke-dashoffset] duration-500 ${
+                  achieved ? 'stroke-achieved' : 'stroke-gold'
+                }`}
+              />
+            )}
+          </svg>
+          <div className="absolute inset-0 grid place-items-center text-center leading-none">
+            <div>
+              <span
+                className={`tabular block text-xl font-bold ${achieved ? 'text-achieved' : 'text-ink'}`}
+                dir="ltr"
+              >
+                {lasCount}
+              </span>
+              <span className="tabular mt-0.5 block text-xs text-muted">
+                {targeted ? `من ${dailyTarget}` : 'LAS'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-lg font-bold text-ink">{outletName}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className={`rounded-full border px-2 py-0.5 ${shiftChip}`}>
+              {shift !== null ? SHIFT_LABEL_WITH_ICON[shift] : 'بدون فترة'}
+            </span>
+            <span
+              className="tabular rounded-full border border-line-soft bg-surface-raised px-2 py-0.5 text-muted"
+              dir="ltr"
+            >
               {formatReportDate(workDate)}
             </span>
           </p>
-        </div>
-
-        <div className="shrink-0 text-left" dir="ltr">
-          <p className={`tabular text-xl font-bold leading-none ${BAND_TEXT[band]}`}>
-            {lasCount}
-            {dailyTarget !== null && (
-              <span className="text-sm font-normal text-muted">/{dailyTarget}</span>
-            )}
-          </p>
-          <p className="mt-0.5 text-xs text-muted">LAS</p>
+          {targeted && (
+            <p className={`mt-1.5 text-sm ${achieved ? 'text-achieved' : 'text-gold'}`}>
+              {achieved ? (
+                'تم تحقيق الهدف ✓'
+              ) : (
+                <>
+                  باقي <span className="tabular font-bold">{left}</span> للهدف
+                </>
+              )}
+            </p>
+          )}
         </div>
       </div>
-
-      {dailyTarget !== null && (
-        <div className="mt-2 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/6">
-            <div
-              className={`h-full rounded-full transition-[width] duration-500 ${BAND_BAR[band]}`}
-              style={{ width: `${Math.min(100, percent ?? 0)}%` }}
-            />
-          </div>
-          <span className={`tabular text-xs font-bold ${BAND_TEXT[band]}`} dir="ltr">
-            {percent}%
-          </span>
-        </div>
-      )}
 
       {!isToday && (
         <p className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-behind">

@@ -155,6 +155,11 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
   // it. Reloads whenever the city or the date changes.
   const [activity, setActivity] = useState<readonly DailyActivityRow[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
+  // Bumped by the refresh button. `date` cannot trigger the reload on its own:
+  // refreshing re-reads today's date, gets the same string back, and the effect
+  // sees no change — so the button used to update the status strip and leave
+  // every promoter's numbers as they were when the page opened.
+  const [activityReload, setActivityReload] = useState(0);
 
   useEffect(() => {
     if (tab !== 'status') return;
@@ -169,7 +174,7 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
     return () => {
       live = false;
     };
-  }, [tab, city, date]);
+  }, [tab, city, date, activityReload]);
 
   // --- Discipline, on the Team tab ----------------------------------------
   // Shared between supervisor and manager: either records one, both see all.
@@ -412,8 +417,11 @@ export function SupervisorFlow({ profile, onSignedOut }: SupervisorFlowProps) {
 
           <button
             type="button"
-            onClick={() => void refresh(city)}
-            disabled={loading}
+            onClick={() => {
+              void refresh(city);
+              setActivityReload((count) => count + 1);
+            }}
+            disabled={loading || activityLoading}
             className="mt-3 min-h-tap w-full rounded-control border border-line text-sm text-gold disabled:opacity-40"
           >
             تحديث

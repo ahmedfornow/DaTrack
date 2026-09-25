@@ -255,7 +255,9 @@ export function TeamPanel({
                         <span className="block truncate text-sm font-bold text-ink">
                           {shortOutletName(report.outlet)}
                         </span>
-                        <span className="tabular block text-xs text-muted" dir="ltr">
+                        {/* RTL: the line carries Arabic words, and forcing it
+                            LTR put each number after its noun ("صنف 12"). */}
+                        <span className="tabular block text-xs text-muted">
                           {report.itemCount} صنف · {report.totalUnits} قطعة
                           {at !== null ? ` · ${at}` : ''}
                         </span>
